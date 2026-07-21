@@ -72,7 +72,7 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: frontend
           file: Dockerfile
           load: true
           push: false
@@ -82,8 +82,8 @@ jobs:
 
       - name: Save images
         run: |
-          docker save ./backend:${{ github.ref_name }}-${{ github.sha }} > backend.tar
-          docker save ./frontend:${{ github.ref_name }}-${{ github.sha }} > frontend.tar
+          docker save bombo/backend:${{ github.ref_name }}-${{ github.sha }} > backend.tar
+          docker save bombo/frontend:${{ github.ref_name }}-${{ github.sha }} > frontend.tar
 
       - name: Upload images
         uses: actions/upload-artifact@v4
