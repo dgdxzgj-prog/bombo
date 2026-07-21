@@ -61,7 +61,7 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./bombo
+          context: .
           dockerfile: Dockerfile.backend
           push: false
           tags: bombo/backend:${{ github.ref_name }}-${{ github.sha }}
@@ -71,7 +71,7 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./bombo/frontend
+          context: ./frontend
           dockerfile: Dockerfile
           push: false
           tags: bombo/frontend:${{ github.ref_name }}-${{ github.sha }}
