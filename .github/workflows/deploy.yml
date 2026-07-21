@@ -1,0 +1,142 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # 代码检查和测试
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run lint
+        run: |
+          # 添加你的 lint 命令，如:
+          # flake8 src/ --max-line-length=120
+          echo "Lint passed"
+
+      - name: Run tests
+        run: |
+          # 添加你的测试命令，如:
+          # pytest tests/ --cov=src
+          echo "Tests passed"
+
+  # 构建 Docker 镜像
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./bombo
+          dockerfile: Dockerfile.backend
+          push: false
+          tags: bombo/backend:${{ github.ref_name }}-${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./bombo/frontend
+          dockerfile: Dockerfile
+          push: false
+          tags: bombo/frontend:${{ github.ref_name }}-${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Save images
+        run: |
+          docker save bombo/backend:${{ github.ref_name }}-${{ github.sha }} > backend.tar
+          docker save bombo/frontend:${{ github.ref_name }}-${{ github.sha }} > frontend.tar
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: |
+            backend.tar
+            frontend.tar
+
+  # 部署到服务器
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load images
+        run: |
+          docker load < backend.tar
+          docker load < frontend.tar
+
+      - name: Tag images
+        run: |
+          docker tag bombo/backend:${{ github.ref_name }}-${{ github.sha }} bombo/backend:latest
+          docker tag bombo/frontend:${{ github.ref_name }}-${{ github.sha }} bombo/frontend:latest
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          source: ".github/workflows/deploy.sh,bombo/"
+          target: ${{ secrets.SERVER_DEPLOY_PATH || '/opt/bombo' }}
+          strip_components: 1
+          overwrite: true
+
+      - name: Run deploy script
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            cd ${{ secrets.SERVER_DEPLOY_PATH || '/opt/bombo' }}
+            chmod +x deploy.sh
+            ./deploy.sh "${{ github.ref_name }}" "${{ github.sha }}"

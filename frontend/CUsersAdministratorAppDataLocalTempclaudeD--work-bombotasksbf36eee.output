@@ -1,0 +1,28 @@
+
+> bombo-frontend@1.0.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use by process 17956, using available port 3006 instead.
+   ▲ Next.js 15.5.20
+   - Local:        http://localhost:3006
+   - Network:      http://192.168.218.12:3006
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.1s
+ ⚠ Found a change in next.config.mjs. Restarting the server to apply the changes...
+   ▲ Next.js 15.5.20
+   - Local:        http://localhost:3005
+   - Network:      http://192.168.218.12:3005
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.1s
+   Reload env: .env.local
+en 'D:\work\bombo\bombo\frontend\.next\prerender-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\work\\bombo\\bombo\\frontend\\.next\\prerender-manifest.json'
+}
+[?25h
