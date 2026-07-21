@@ -64,7 +64,7 @@ jobs:
           context: .
           dockerfile: Dockerfile.backend
           push: false
-          tags: ./backend:${{ github.ref_name }}-${{ github.sha }}
+          tags: bombo/backend:${{ github.ref_name }}-${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
@@ -74,7 +74,7 @@ jobs:
           context: ./frontend
           dockerfile: Dockerfile
           push: false
-          tags: ./frontend:${{ github.ref_name }}-${{ github.sha }}
+          tags: bombo/frontend:${{ github.ref_name }}-${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
@@ -114,8 +114,8 @@ jobs:
 
       - name: Tag images
         run: |
-          docker tag ./backend:${{ github.ref_name }}-${{ github.sha }} ./backend:latest
-          docker tag ./frontend:${{ github.ref_name }}-${{ github.sha }} ./frontend:latest
+          docker tag bombo/backend:${{ github.ref_name }}-${{ github.sha }} bombo/backend:latest
+          docker tag bombo/frontend:${{ github.ref_name }}-${{ github.sha }} bombo/frontend:latest
 
       - name: Copy files to server
         uses: appleboy/scp-action@master
