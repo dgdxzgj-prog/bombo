@@ -117,9 +117,13 @@ export default function CostPage() {
   // 没有数据时的友好提示
   const hasNoData = !summary || !summary.today || !summary.this_month;
 
-  const todayVsYesterday = summary?.yesterday?.total_cost > 0
-    ? ((summary.today.total_cost - summary.yesterday.total_cost) / summary.yesterday.total_cost * 100).toFixed(1)
-    : "0";
+// 提取变量并使用空值合并运算符 (??) 赋默认值 0
+const yesterdayCost = summary?.yesterday?.total_cost ?? 0;
+const todayCost = summary?.today?.total_cost ?? 0;
+
+const todayVsYesterday = yesterdayCost > 0
+  ? ((todayCost - yesterdayCost) / yesterdayCost * 100).toFixed(1)
+  : "0";
 
   return (
     <>
