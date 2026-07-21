@@ -64,7 +64,7 @@ jobs:
           context: .
           dockerfile: Dockerfile.backend
           push: false
-          tags: bombo/backend:${{ github.ref_name }}-${{ github.sha }}
+          tags: ./backend:${{ github.ref_name }}-${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
@@ -74,14 +74,14 @@ jobs:
           context: ./frontend
           dockerfile: Dockerfile
           push: false
-          tags: bombo/frontend:${{ github.ref_name }}-${{ github.sha }}
+          tags: ./frontend:${{ github.ref_name }}-${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
       - name: Save images
         run: |
-          docker save bombo/backend:${{ github.ref_name }}-${{ github.sha }} > backend.tar
-          docker save bombo/frontend:${{ github.ref_name }}-${{ github.sha }} > frontend.tar
+          docker save ./backend:${{ github.ref_name }}-${{ github.sha }} > backend.tar
+          docker save ./frontend:${{ github.ref_name }}-${{ github.sha }} > frontend.tar
 
       - name: Upload images
         uses: actions/upload-artifact@v4
@@ -114,8 +114,8 @@ jobs:
 
       - name: Tag images
         run: |
-          docker tag bombo/backend:${{ github.ref_name }}-${{ github.sha }} bombo/backend:latest
-          docker tag bombo/frontend:${{ github.ref_name }}-${{ github.sha }} bombo/frontend:latest
+          docker tag ./backend:${{ github.ref_name }}-${{ github.sha }} ./backend:latest
+          docker tag ./frontend:${{ github.ref_name }}-${{ github.sha }} ./frontend:latest
 
       - name: Copy files to server
         uses: appleboy/scp-action@master
@@ -124,7 +124,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          source: ".github/workflows/deploy.sh,bombo/"
+          source: ".github/workflows/deploy.sh,./"
           target: ${{ secrets.SERVER_DEPLOY_PATH || '/opt/bombo' }}
           strip_components: 1
           overwrite: true
