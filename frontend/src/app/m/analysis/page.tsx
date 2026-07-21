@@ -26,7 +26,7 @@ export default function MobileAnalysisPage() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [bvid, setBvid] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisResult, setAnalysisResult] = useState<unknown>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
 
