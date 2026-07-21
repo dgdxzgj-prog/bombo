@@ -201,5 +201,5 @@ export interface UserStatusResponse {
     upgrade_tiers: Array<{ tier: string; price: number }>;
     trial_count?: number;
   };
-  quotas: Record<string, any>;
+  quotas: Record<string, unknown>;
 }
