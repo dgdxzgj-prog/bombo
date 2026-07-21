@@ -203,7 +203,7 @@ export default function MobileVideoPage() {
         {!video.ai_analysis && (
           <div className="bg-gray-50 rounded-xl p-4 text-center">
             <p className="text-gray-500 text-sm">暂无AI分析结果</p>
-            <p className="text-gray-400 text-xs mt-1">点击"AI分析"按钮生成分析报告</p>
+            <p className="text-gray-400 text-xs mt-1">点击&quotAI分析&quot按钮生成分析报告</p>
           </div>
         )}
       </div>
