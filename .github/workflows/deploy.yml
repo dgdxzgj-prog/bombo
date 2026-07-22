@@ -102,22 +102,25 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
+      # 1. 从 Actions Artifact 下载打包好的镜像
       - name: Download images
         uses: actions/download-artifact@v4
         with:
           name: docker-images
 
-      - name: Load images
-        run: |
-          docker load < backend.tar
-          docker load < frontend.tar
-
-      - name: Tag images
-        run: |
-          docker tag bombo/backend:${{ github.ref_name }}-${{ github.sha }} bombo/backend:latest
-          docker tag bombo/frontend:${{ github.ref_name }}-${{ github.sha }} bombo/frontend:latest
+      # 2. 将配置文件与部署脚本一次性传输到服务器
+      - name: Copy config files to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          source: "docker-compose.yml,nginx.conf"
+          target: ${{ secrets.SERVER_DEPLOY_PATH || '/opt/bombo' }}
+          overwrite: true
 
       - name: Copy deploy.sh to server
         uses: appleboy/scp-action@master
@@ -131,19 +134,20 @@ jobs:
           strip_components: 2
           overwrite: true
 
-      - name: Copy other files to server
+      # 3. 将下载好的镜像 tar 包传输到服务器
+      - name: Copy image tar files to server
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          source: "./"
+          source: "backend.tar,frontend.tar"
           target: ${{ secrets.SERVER_DEPLOY_PATH || '/opt/bombo' }}
-          strip_components: 1
           overwrite: true
 
-      - name: Run deploy script
+      # 4. 在远程服务器上解压/加载镜像并运行 deploy.sh
+      - name: Load images and Run deploy script
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -152,5 +156,18 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
             cd ${{ secrets.SERVER_DEPLOY_PATH || '/opt/bombo' }}
+            
+            echo "=== 正在目标服务器加载镜像 ==="
+            docker load < backend.tar
+            docker load < frontend.tar
+            
+            echo "=== 标记镜像为 latest ==="
+            docker tag bombo/backend:${{ github.ref_name }}-${{ github.sha }} bombo/backend:latest || true
+            docker tag bombo/frontend:${{ github.ref_name }}-${{ github.sha }} bombo/frontend:latest || true
+            
+            # 清理无用的 tar 临时包以省下空间
+            rm -f backend.tar frontend.tar
+            
+            echo "=== 执行部署脚本 ==="
             chmod +x deploy.sh
             ./deploy.sh "${{ github.ref_name }}" "${{ github.sha }}"
