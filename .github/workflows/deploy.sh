@@ -45,7 +45,7 @@ fi
 # 启动服务
 echo "=== 启动服务 ==="
 # 注意：CI/CD 流程中 Docker 镜像已经在 GitHub Actions 构建并加到本地了，不需要 pull 远程仓库
-docker-compose up -d || docker compose up -d
+docker-compose up -d --no-build || docker compose up -d --no-build
 
 # 等待服务启动
 echo "=== 等待服务启动 ==="
