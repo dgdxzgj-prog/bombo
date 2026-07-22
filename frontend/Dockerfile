@@ -30,8 +30,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone/frontend ./frontend
+# 1. 确保 public 目录存在，如果 builder 中有 public 则复制，没有就创建空目录（避免找不到 public 报错）
+RUN mkdir -p ./public
+COPY --from=builder /app/public* ./public/
+
+# 2. 修改 standalone 复制路径为标准产物目录 ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
@@ -41,4 +45,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "frontend/server.js"]
+CMD ["node", "server.js"]

@@ -199,3 +199,53 @@
 ## 访问地址
 - 前端：http://localhost:3003/videos
 - 后端API：http://localhost:8000/api/videos/featured
+
+---
+
+## 六、Docker 部署配置更新 (2026-07-22)
+
+### 已完成的工作
+
+#### 1. TypeScript 类型修复
+- [x] `Video` 接口添加 `ai_analysis?: AIAnalysis` 属性 (`src/types/index.ts`)
+- [x] `analysisResult` 状态类型从 `unknown` 改为 `AIAnalysis | null` (`src/app/m/analysis/page.tsx`)
+- [x] `Tier` 接口添加 `unavailable?: string[]` 属性 (`src/app/m/pricing/page.tsx`)
+
+#### 2. Next.js App Router SSG/Prerender 问题修复
+- [x] `(user)/page.tsx` 添加 `export const dynamic = 'force-dynamic'` 防止静态预渲染
+- [x] `m/analysis/page.tsx` 使用 Suspense wrapper 包裹使用 `useSearchParams()` 的组件
+- [x] `m/pricing/page.tsx` 移除未使用的 `useSearchParams` import
+
+#### 3. Docker 部署配置
+- [x] `next.config.mjs` 添加 `output: 'standalone'`
+- [x] `Dockerfile` 添加 `rm -rf .next` 在 build 前
+- [x] 修复 COPY 路径: `/app/.next/standalone/frontend` → `./frontend`
+- [x] 更新 CMD 为 `node frontend/server.js`
+
+#### 4. 构建状态
+- [x] 前端构建成功 (仅有 ESLint warnings，无 errors)
+
+### 修改的文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `src/types/index.ts` | 添加 ai_analysis 属性 |
+| `src/app/m/analysis/page.tsx` | Suspense wrapper + 类型修复 |
+| `src/app/m/pricing/page.tsx` | 移除 useSearchParams + unavailable 属性 |
+| `src/app/(user)/page.tsx` | 添加 dynamic export |
+| `next.config.mjs` | 添加 standalone output |
+| `Dockerfile` | 修复路径和 build 步骤 |
+
+### 服务状态检查 (2026-07-22)
+
+| 服务 | 端口 | 状态 |
+|------|------|------|
+| PostgreSQL | 5432 | 运行中 |
+| Redis | 6379 | 运行中 |
+| 后端 API | 8000 | **未运行** |
+| 前端 Next.js | 3000 | 未运行 |
+
+### 待完成
+- [ ] 启动后端服务器 (端口 8000)
+- [ ] 运行 Docker build 验证容器构建
+- [ ] 测试完整部署流程
