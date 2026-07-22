@@ -5,6 +5,7 @@ services:
   frontend:
     image: bombo/frontend:latest
     container_name: bombo-frontend
+    pull_policy: never # 强制只使用本地镜像，绝不去远程 pull
     ports:
       - "3000:3000"
     environment:
@@ -19,6 +20,7 @@ services:
   backend:
     image: bombo/backend:latest
     container_name: bombo-backend
+    pull_policy: never # 强制只使用本地镜像，绝不去远程 pull
     ports:
       - "8000:8000"
     environment:
