@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple, Callable, Any
 
 from sqlalchemy import text
-from bilibili_api import video, Credential
+from bilibili_api import video
+from bilibili_api.credential import Credential
 from bilibili_api.exceptions import ResponseException, NetworkException
 
 from src.utils.database import get_db_session

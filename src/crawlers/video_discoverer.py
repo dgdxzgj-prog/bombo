@@ -6,7 +6,8 @@ import asyncio
 from typing import List, Optional, Callable, Generator, Any, Dict
 from dataclasses import dataclass
 
-from bilibili_api import video, misc, Credential
+from bilibili_api import video, misc
+from bilibili_api.credential import Credential
 from bilibili_api.exceptions import ResponseException, NetworkException
 
 from src.config import settings
