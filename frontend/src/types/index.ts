@@ -47,6 +47,7 @@ export interface Video {
   status: VideoStatus;
   first_seen: string;
   last_collected?: string;
+  ai_analysis?: AIAnalysis;
 }
 
 export interface VideoListResponse {
