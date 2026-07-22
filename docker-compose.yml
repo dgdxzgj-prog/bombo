@@ -1,13 +1,12 @@
 services:
   # Frontend - Next.js
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: bombo/frontend:latest
+    container_name: bombo-frontend
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       - backend
     networks:
@@ -16,18 +15,19 @@ services:
 
   # Backend - FastAPI
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+    image: bombo/backend:latest
+    container_name: bombo-backend
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://bombo:bombo123@postgres:5432/bombo
+      - DATABASE_URL=postgresql://bombo:j9yd(2dWsdSi@postgres:5432/bombo
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-production-secret-key-change-in-production
+      - SECRET_KEY=9a0d5252a0732c928b4945ef2ba5d8e8f76a084fe257119f6cae444f6c9c0f1a
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - bombo-network
     restart: unless-stopped
@@ -35,9 +35,10 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
+    container_name: bombo-postgres
     environment:
       - POSTGRES_USER=bombo
-      - POSTGRES_PASSWORD=bombo123
+      - POSTGRES_PASSWORD=j9yd(2dWsdSi
       - POSTGRES_DB=bombo
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -46,22 +47,34 @@ services:
       - "5432:5432"
     networks:
       - bombo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bombo -d bombo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # Redis Cache
   redis:
     image: redis:7-alpine
+    container_name: bombo-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
       - bombo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
+    container_name: bombo-nginx
     ports:
       - "80:80"
       - "443:443"
