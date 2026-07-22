@@ -16,3 +16,4 @@ src/env.py
 *.log
 tmp/
 nul
+*.tsbuildinfo
