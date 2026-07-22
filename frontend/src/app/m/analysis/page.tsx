@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Loader2, Lock, Zap, Users, Crown } from "lucide-react";
 import type { AIAnalysis } from "@/types";
@@ -23,7 +23,7 @@ interface UserStatus {
   };
 }
 
-export default function MobileAnalysisPage() {
+function AnalysisContent() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [bvid, setBvid] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -289,6 +289,14 @@ export default function MobileAnalysisPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MobileAnalysisPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-center">加载中...</div>}>
+      <AnalysisContent />
+    </Suspense>
   );
 }
 

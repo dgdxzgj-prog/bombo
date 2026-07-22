@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Check, Zap, Crown, Sparkles, Loader2, Lock } from "lucide-react";
 
 interface Tier {
@@ -28,7 +28,6 @@ export default function MobilePricingPage() {
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribing, setIsSubscribing] = useState<string | null>(null);
-  const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
