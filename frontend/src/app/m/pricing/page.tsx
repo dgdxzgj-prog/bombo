@@ -9,6 +9,7 @@ interface Tier {
   name: string;
   price: number;
   features: string[];
+  unavailable?: string[];
   limits: {
     day_self_analysis: number;
     month_custom_bvid: number;

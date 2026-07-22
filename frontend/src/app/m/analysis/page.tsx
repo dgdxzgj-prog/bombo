@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Loader2, Lock, Zap, Users, Crown } from "lucide-react";
+import type { AIAnalysis } from "@/types";
 
 interface UserStatus {
   user_level: string;
@@ -26,7 +27,7 @@ export default function MobileAnalysisPage() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [bvid, setBvid] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<unknown>(null);
+  const [analysisResult, setAnalysisResult] = useState<AIAnalysis | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -156,7 +157,7 @@ export default function MobileAnalysisPage() {
       </div>
 
       {/* Quota Cards */}
-      {userStatus?.is_login && userStatus.quotas && (
+      {!!userStatus?.is_login && !!userStatus?.quotas && (
         <div className="mb-6 grid grid-cols-3 gap-2">
           <QuotaCard
             title="今日自选"
