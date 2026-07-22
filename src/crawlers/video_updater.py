@@ -7,8 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Callable, Dict, Any
 from dataclasses import dataclass
 
-from bilibili_api import video
-from bilibili_api.credential import Credential
+from bilibili_api import video, Credential
 from bilibili_api.exceptions import ResponseException, NetworkException
 
 from src.config import settings
