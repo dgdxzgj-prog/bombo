@@ -6,7 +6,8 @@ import asyncio
 from typing import List, Optional, Callable, Generator, Any, Dict
 from dataclasses import dataclass
 
-from bilibili_api import video, misc, Credential
+from bilibili_api import video, Credential
+from bilibili_api import search as bilibili_search
 from bilibili_api.exceptions import ResponseException, NetworkException
 
 from src.config import settings
@@ -107,7 +108,7 @@ class VideoDiscoverer:
     ) -> List[VideoSearchResult]:
         """异步搜索视频（延时由调用方控制）"""
         try:
-            search_data = await misc.web_search(keyword)
+            search_data = await bilibili_search.search(keyword=keyword, search_type=bilibili_search.SearchObjectType.VIDEO)
             results = []
 
             # bilibili-api返回的是dict，需要从result字段获取列表
