@@ -24,6 +24,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - PYTHONPATH=/app
       - DATABASE_URL=postgresql://bombo:j9yd(2dWsdSi@postgres:5432/bombo
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=9a0d5252a0732c928b4945ef2ba5d8e8f76a084fe257119f6cae444f6c9c0f1a
