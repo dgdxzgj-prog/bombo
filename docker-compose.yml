@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
   # Frontend - Next.js
   frontend:
     image: bombo/frontend:latest
     container_name: bombo-frontend
-    pull_policy: never # 强制只使用本地镜像，绝不去远程 pull
+    pull_policy: never
     ports:
       - "3000:3000"
     environment:
@@ -20,19 +18,17 @@ services:
   backend:
     image: bombo/backend:latest
     container_name: bombo-backend
-    pull_policy: never # 强制只使用本地镜像，绝不去远程 pull
+    pull_policy: never
     ports:
       - "8000:8000"
     environment:
       - PYTHONPATH=/app
-      - DATABASE_URL=postgresql://bombo:j9yd(2dWsdSi@postgres:5432/bombo
+      - DATABASE_URL=postgresql://bombo:j9yd2dWsdSi@postgres:5432/bombo
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=9a0d5252a0732c928b4945ef2ba5d8e8f76a084fe257119f6cae444f6c9c0f1a
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     networks:
       - bombo-network
     restart: unless-stopped
@@ -43,7 +39,7 @@ services:
     container_name: bombo-postgres
     environment:
       - POSTGRES_USER=bombo
-      - POSTGRES_PASSWORD=j9yd(2dWsdSi
+      - POSTGRES_PASSWORD=j9yd2dWsdSi
       - POSTGRES_DB=bombo
     volumes:
       - postgres_data:/var/lib/postgresql/data
