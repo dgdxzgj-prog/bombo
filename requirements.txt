@@ -28,6 +28,7 @@ apscheduler==3.10.4
 # Utils
 python-dotenv==1.0.0
 loguru==0.7.2
+numpy==1.26.3
 
 # Testing
 pytest==7.4.4
