@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Users, MessageCircle } from "lucide-react";
+import { Loader2, Users, MessageCircle, Eye, Heart, Star, Hash, User, Folder, ChevronLeft } from "lucide-react";
 
 interface Video {
   bvid: string;
@@ -16,23 +16,43 @@ interface Video {
   online_count?: number;
   like_count: number;
   favorite_count: number;
+  coin_count: number;
+  share_count: number;
   reply_count: number;
   pubdate?: string;
   status: string;
+  duration?: number;
+  tags?: string[];
+  author_avatar?: string;
+  author_fans?: number;
+  author_video_count?: number;
   ai_analysis?: {
+    bvid: string;
+    created_at?: string;
     cover_analysis?: {
-      cover_composition?: string;
-      cover_main_element?: string;
-      cover_color_scheme?: string;
-      cover_visual_style?: string;
-      cover_mood_atmosphere?: string;
-      cover_audience_expectation?: string;
+      composition?: {
+        rule?: string;
+        description?: string;
+      };
+      elements?: {
+        subjects?: string;
+        text?: string;
+        color_palette?: string;
+        lighting?: string;
+      };
+      style?: {
+        overall?: string;
+        mood?: string;
+      };
+      appeal?: {
+        attraction?: string;
+        hook?: string;
+      };
     };
     content_analysis?: {
-      topic_summary?: string;
-      viral_logic_analysis?: string;
-      content_optimization_suggestions?: string;
-      replicability_evaluation?: string;
+      shortTopic?: string;
+      summaryInsight?: string;
+      optimizationSuggestions?: string;
     };
   };
 }
@@ -44,10 +64,45 @@ export default function MobileVideoPage() {
 
   const [video, setVideo] = useState<Video | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [swipeHint, setSwipeHint] = useState(false);
+
+  // 右滑返回手势
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
+
+  useEffect(() => {
+    // 显示滑动提示
+    const hasSwipedBefore = sessionStorage.getItem("hasSwipedBack");
+    if (!hasSwipedBefore) {
+      setSwipeHint(true);
+      setTimeout(() => setSwipeHint(false), 3000);
+    }
+  }, []);
 
   useEffect(() => {
     fetchVideoDetail();
   }, [bvid]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchEndX.current - touchStartX.current;
+    // 右滑超过100px且在左侧边缘触发
+    if (diff > 100 && touchStartX.current < 50) {
+      sessionStorage.setItem("hasSwipedBack", "true");
+      router.back();
+    }
+  };
+
+  const handleBack = () => {
+    router.back();
+  };
 
   const fetchVideoDetail = async () => {
     setIsLoading(true);
@@ -68,6 +123,15 @@ export default function MobileVideoPage() {
     if (views >= 100000000) return (views / 100000000).toFixed(1) + "亿";
     if (views >= 10000) return (views / 10000).toFixed(1) + "万";
     return views.toString();
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (!seconds) return "";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
   if (isLoading) {
@@ -93,32 +157,35 @@ export default function MobileVideoPage() {
     : null;
 
   return (
-    <div className="pb-4">
-      {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-100 z-10 px-3 py-2 flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 -ml-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
-        <span className="font-medium text-gray-800 text-sm truncate flex-1">
-          视频详情
-        </span>
-
-      </div>
+    <div
+      className="pb-4"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Swipe Hint Toast */}
+      {swipeHint && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-800/90 text-white text-xs px-4 py-2 rounded-full z-50 animate-fade-in-out">
+          ← 左滑边缘可返回榜单
+        </div>
+      )}
 
       {/* Video Info */}
       <div className="px-3 py-3">
-        {/* Cover */}
-        <div className="relative aspect-video bg-gray-100 rounded-xl overflow-hidden mb-3">
+        {/* Cover - Top Full Width 16:9 */}
+        <a
+          href={`https://www.bilibili.com/video/${video.bvid}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block relative w-full aspect-video bg-gray-100 rounded-md overflow-hidden mb-3"
+        >
           {coverProxyUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={coverProxyUrl} alt={video.title} className="w-full h-full object-cover" />
           )}
           {video.online_count && video.online_count > 0 && (
             <div
-              className={`absolute bottom-2 right-2 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${
+              className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${
                 video.online_count > 10000
                   ? "bg-red-50 border-red-400 text-red-600"
                   : video.online_count > 1000
@@ -130,73 +197,115 @@ export default function MobileVideoPage() {
               {video.online_count >= 10000 ? (video.online_count / 10000).toFixed(1) + "万" : video.online_count}
             </div>
           )}
-        </div>
+          {video.duration && video.duration > 0 && (
+            <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium">
+              {formatDuration(video.duration)}
+            </div>
+          )}
+        </a>
 
-        {/* Title & Meta */}
+        {/* Title Below Cover */}
         <h1 className="text-base font-bold text-gray-800 mb-2">{video.title}</h1>
-        <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
-          <span>{video.author}</span>
-          <span>·</span>
-          <span>{video.channel}</span>
-          <span>·</span>
-          <span>{video.pubdate ? new Date(video.pubdate).toLocaleString('zh-CN') : '未知'}</span>
+
+        {/* Author & Stats Row */}
+        <div className="flex items-center justify-between gap-3 text-xs text-gray-500 mb-2">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <User className="w-3 h-3" />{video.author}
+            </span>
+            <span>|</span>
+            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+              {video.channel}
+            </span>
+          </div>
+          <span className="text-gray-400">
+            {video.pubdate ? new Date(video.pubdate).toLocaleString('zh-CN') : '未知'}
+          </span>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-            <p className="text-sm font-bold text-gray-800">{formatViews(video.view_today)}</p>
-            <p className="text-xs text-gray-500">播放</p>
+        {/* Stats Row */}
+        <div className="flex items-center gap-4 text-xs mb-3">
+          <span className="flex items-center gap-1 text-gray-600">
+            <Eye className="w-3 h-3" />{formatViews(video.view_today)}
+          </span>
+          <span className="flex items-center gap-1 text-gray-600">
+            <Heart className="w-3 h-3" />{formatViews(video.like_count)}
+          </span>
+          <span className="flex items-center gap-1 text-gray-600">
+            <Star className="w-3 h-3" />{formatViews(video.favorite_count)}
+          </span>
+          <span className="flex items-center gap-1 text-gray-600">
+            <MessageCircle className="w-3 h-3" />{formatViews(video.reply_count)}
+          </span>
           </div>
-          <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-            <p className="text-sm font-bold text-gray-800">{formatViews(video.like_count)}</p>
-            <p className="text-xs text-gray-500">点赞</p>
+
+        {/* Tags */}
+        {video.tags && video.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {video.tags.map((tag, index) => (
+              <span
+                key={index}
+                className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
+              >
+                {tag}
+              </span>
+            ))}
           </div>
-          <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-            <p className="text-sm font-bold text-gray-800">{formatViews(video.favorite_count)}</p>
-            <p className="text-xs text-gray-500">收藏</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-            <p className="text-sm font-bold text-gray-800">{formatViews(video.reply_count)}</p>
-            <p className="text-xs text-gray-500 flex items-center justify-center gap-1"><MessageCircle className="w-3 h-3" />评论</p>
-          </div>
-        </div>
+        )}
 
         {/* AI Analysis */}
-        {video.ai_analysis && (
+        {video.ai_analysis && video.ai_analysis.content_analysis && (
           <div className="space-y-3">
-            <h2 className="font-medium text-gray-800">AI分析结果</h2>
-
-            {video.ai_analysis.cover_analysis && (
+            {video.ai_analysis.content_analysis.shortTopic && (
               <div className="bg-white rounded-xl p-3 shadow-sm">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">封面分析</h3>
-                <div className="space-y-1.5 text-xs text-gray-600">
-                  <p><span className="text-gray-400">主体元素：</span>{video.ai_analysis.cover_analysis.cover_main_element}</p>
-                  <p><span className="text-gray-400">配色方案：</span>{video.ai_analysis.cover_analysis.cover_color_scheme}</p>
-                  <p><span className="text-gray-400">视觉风格：</span>{video.ai_analysis.cover_analysis.cover_visual_style}</p>
-                  <p><span className="text-gray-400">情绪氛围：</span>{video.ai_analysis.cover_analysis.cover_mood_atmosphere}</p>
-                  <p><span className="text-gray-400">观众期待：</span>{video.ai_analysis.cover_analysis.cover_audience_expectation}</p>
-                </div>
+                <p className="text-xs text-gray-600"><span className="text-gray-700 font-medium">选题：</span>{video.ai_analysis.content_analysis.shortTopic}</p>
               </div>
             )}
 
-            {video.ai_analysis.content_analysis && (
+            {video.ai_analysis.content_analysis.summaryInsight && (
               <div className="bg-white rounded-xl p-3 shadow-sm">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">内容分析</h3>
-                <div className="space-y-1.5 text-xs text-gray-600">
-                  <p><span className="text-gray-400">话题总结：</span>{video.ai_analysis.content_analysis.topic_summary}</p>
-                  {video.ai_analysis.content_analysis.viral_logic_analysis && (
-                    <p><span className="text-gray-400">爆款逻辑：</span>{video.ai_analysis.content_analysis.viral_logic_analysis}</p>
-                  )}
-                  {video.ai_analysis.content_analysis.content_optimization_suggestions && (
-                    <p><span className="text-gray-400">优化建议：</span>{video.ai_analysis.content_analysis.content_optimization_suggestions}</p>
-                  )}
-                  {video.ai_analysis.content_analysis.replicability_evaluation && (
-                    <p><span className="text-gray-400">可复制性：</span>{video.ai_analysis.content_analysis.replicability_evaluation}</p>
-                  )}
-                </div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">爆款分析</h3>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">{video.ai_analysis.content_analysis.summaryInsight}</p>
               </div>
             )}
+
+            {video.ai_analysis.content_analysis.optimizationSuggestions && (
+              <div className="bg-white rounded-xl p-3 shadow-sm">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">优化建议</h3>
+                <p className="text-xs text-gray-600">{video.ai_analysis.content_analysis.optimizationSuggestions}</p>
+              </div>
+            )}
+
+            {!video.ai_analysis.content_analysis.shortTopic &&
+             !video.ai_analysis.content_analysis.summaryInsight &&
+             !video.ai_analysis.content_analysis.optimizationSuggestions && (
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <p className="text-gray-500 text-xs">暂无选题分析内容</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {video.ai_analysis && video.ai_analysis.cover_analysis && (
+          <div className="bg-white rounded-xl p-3 shadow-sm">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">封面分析</h3>
+            <div className="space-y-1.5 text-xs text-gray-600">
+              {video.ai_analysis.cover_analysis.elements?.subjects && (
+                <p><span className="text-gray-400">主体元素：</span>{video.ai_analysis.cover_analysis.elements.subjects}</p>
+              )}
+              {video.ai_analysis.cover_analysis.elements?.color_palette && (
+                <p><span className="text-gray-400">配色方案：</span>{video.ai_analysis.cover_analysis.elements.color_palette}</p>
+              )}
+              {video.ai_analysis.cover_analysis.style?.overall && (
+                <p><span className="text-gray-400">视觉风格：</span>{video.ai_analysis.cover_analysis.style.overall}</p>
+              )}
+              {video.ai_analysis.cover_analysis.style?.mood && (
+                <p><span className="text-gray-400">情绪氛围：</span>{video.ai_analysis.cover_analysis.style.mood}</p>
+              )}
+              {video.ai_analysis.cover_analysis.appeal?.hook && (
+                <p><span className="text-gray-400">观众期待：</span>{video.ai_analysis.cover_analysis.appeal.hook}</p>
+              )}
+            </div>
           </div>
         )}
 

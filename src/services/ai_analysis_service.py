@@ -15,13 +15,32 @@ from src.skills.ai_analysis_skills import COVER_ANALYSIS_SKILL, CONTENT_ANALYSIS
 from sqlalchemy import text
 
 
+# 模板缓存
+_template_cache: Dict[str, str] = {}
+
+
+def _get_ai_api_key_from_db() -> str:
+    """从数据库获取AI API Key"""
+    try:
+        with get_db_session() as session:
+            result = session.execute(
+                text("SELECT config_value FROM system_config WHERE config_key = 'ai_api_key'")
+            ).fetchone()
+            if result and result[0]:
+                return result[0]
+    except Exception as e:
+        print(f"Failed to get AI API key from database: {e}")
+    return ""
+
+
 class DoubaoService:
     """豆包模型服务"""
 
     BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 
     def __init__(self, api_key: Optional[str] = None, model: str = "doubao-seed-2-0-lite-260428"):
-        self.api_key = api_key or settings.ARK_API_KEY
+        # 优先使用传入的 api_key，其次从数据库读取，最后使用环境变量
+        self.api_key = api_key or _get_ai_api_key_from_db() or settings.ARK_API_KEY
         self.model = model
 
     def _call_api(self, prompt: str) -> Optional[Dict[str, Any]]:
@@ -53,10 +72,49 @@ class DoubaoService:
             print(f"Ark API call failed: {e}")
             return None
 
+    def _call_multimodal_api(self, text_prompt: str, image_url: str) -> Optional[Dict[str, Any]]:
+        """调用豆包多模态API（支持图片URL输入）"""
+        if not self.api_key:
+            print("ARK_API_KEY not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # 使用 messages + content 数组格式
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": text_prompt},
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                    ]
+                }
+            ]
+        }
+
+        try:
+            response = requests.post(
+                f"{self.BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Ark Multimodal API call failed: {e}")
+            return None
+
     def analyze_cover(self, video: Video, cover_url: str) -> Optional[VideoAnalysisResult]:
-        """分析视频封面"""
+        """分析视频封面（使用多模态API传递图片URL）"""
         prompt = self._build_cover_prompt(video, cover_url)
-        response = self._call_api(prompt)
+        # 使用多模态API，图片URL会直接传给AI模型进行分析
+        response = self._call_multimodal_api(prompt, cover_url)
         if not response:
             return None
         return self._parse_cover_response(video.bvid, response)
@@ -69,21 +127,95 @@ class DoubaoService:
             return None
         return self._parse_content_response(video.bvid, response)
 
+    def _load_template_from_db(self, template_type: str) -> Optional[str]:
+        """从数据库加载模板，支持缓存"""
+        global _template_cache
+
+        # 先检查缓存
+        if template_type in _template_cache:
+            return _template_cache[template_type]
+
+        try:
+            with get_db_session() as session:
+                result = session.execute(
+                    text("""
+                        SELECT content FROM ai_prompt_template
+                        WHERE template_type = :template_type AND is_active = TRUE
+                    """),
+                    {"template_type": template_type}
+                ).fetchone()
+
+                if result and result[0]:
+                    _template_cache[template_type] = result[0]
+                    return result[0]
+        except Exception as e:
+            print(f"Failed to load template from database: {e}")
+
+        return None
+
+    def _get_template(self, template_type: str) -> str:
+        """获取模板，优先从数据库加载，失败则使用硬编码模板"""
+        template = self._load_template_from_db(template_type)
+        if template:
+            return template
+
+        # 降级到硬编码模板
+        if template_type == "cover":
+            return COVER_ANALYSIS_SKILL
+        elif template_type == "content":
+            return CONTENT_ANALYSIS_SKILL
+
+        raise ValueError(f"Unknown template type: {template_type}")
+
     def _build_cover_prompt(self, video: Video, cover_url: str) -> str:
-        """构建封面分析提示词（7个维度）"""
-        return COVER_ANALYSIS_SKILL.format(
-            video_title=video.title,
-            author=video.author,
-            cover_url=cover_url,
-        )
+        """构建封面分析提示词"""
+        template = self._get_template("cover")
+        # 图片URL通过API单独传递，这里只返回模板文本
+        return template
 
     def _build_content_prompt(self, video: Video) -> str:
         """构建内容分析提示词（4个维度）"""
-        return CONTENT_ANALYSIS_SKILL.format(
+        template = self._get_template("content")
+
+        # 格式化视频时长
+        duration = video.duration or 0
+        if duration > 0:
+            h = duration // 3600
+            m = (duration % 3600) // 60
+            s = duration % 60
+            if h > 0:
+                duration_str = f"{h}小时{m}分钟{s}秒"
+            elif m > 0:
+                duration_str = f"{m}分钟{s}秒"
+            else:
+                duration_str = f"{s}秒"
+        else:
+            duration_str = "未知"
+
+        # 格式化标签
+        tags = video.tags
+        if tags:
+            tags_str = "、".join(tags[:10])  # 最多10个标签
+            if len(tags) > 10:
+                tags_str += f" 等{len(tags)}个标签"
+        else:
+            tags_str = "无"
+
+        return template.format(
             video_title=video.title,
             author=video.author,
             channel=video.channel,
             description=getattr(video, 'description', '') or '无',
+            duration=duration_str,
+            tags=tags_str,
+            view_today=video.view_today,
+            growth_rate=video.growth_rate,
+            like_count=video.like_count,
+            favorite_count=video.favorite_count,
+            reply_count=video.reply_count,
+            coin_count=video.coin_count,
+            share_count=video.share_count,
+            author_fans=getattr(video, 'author_fans', 0) or 0,
         )
 
     def _parse_cover_response(self, bvid: str, response: Dict[str, Any]) -> Optional[VideoAnalysisResult]:
@@ -107,6 +239,7 @@ class DoubaoService:
     def _extract_output_text(self, response: Dict[str, Any]) -> str:
         """从API响应中提取output_text"""
         try:
+            # 尝试 /responses 格式
             output = response.get("output", [])
             for item in output:
                 if item.get("type") == "message":
@@ -114,6 +247,15 @@ class DoubaoService:
                     for c in content:
                         if c.get("type") == "output_text":
                             return c.get("text", "").strip()
+
+            # 尝试 /chat/completions 格式
+            choices = response.get("choices", [])
+            if choices:
+                message = choices[0].get("message", {})
+                content = message.get("content", "")
+                if content:
+                    return content.strip()
+
             return ""
         except Exception:
             return ""
@@ -137,20 +279,27 @@ class DoubaoService:
             )
 
             if analysis_type == "cover":
-                # 封面分析7维度
-                result.cover_composition = data.get("cover_composition")
-                result.cover_main_element = data.get("cover_main_element")
-                result.cover_color_scheme = data.get("cover_color_scheme")
-                result.cover_visual_style = data.get("cover_visual_style")
-                result.cover_mood_atmosphere = data.get("cover_mood_atmosphere")
-                result.cover_visual_highlights = data.get("cover_visual_highlights", [])
-                result.cover_audience_expectation = data.get("cover_audience_expectation")
+                # 封面分析 - 新结构
+                composition = data.get("composition", {})
+                elements = data.get("elements", {})
+                style = data.get("style", {})
+                appeal = data.get("appeal", {})
+
+                result.composition_rule = composition.get("rule")
+                result.composition_desc = composition.get("description")
+                result.elements_subjects = elements.get("subjects")
+                result.elements_text = elements.get("text")
+                result.elements_color_palette = elements.get("color_palette")
+                result.elements_lighting = elements.get("lighting")
+                result.style_overall = style.get("overall")
+                result.style_mood = style.get("mood")
+                result.appeal_attraction = appeal.get("attraction")
+                result.appeal_hook = appeal.get("hook")
             else:
-                # 内容分析4维度
-                result.topic_summary = data.get("topic_summary")
-                result.viral_logic_analysis = data.get("viral_logic_analysis")
-                result.content_optimization_suggestions = data.get("content_optimization_suggestions")
-                result.replicability_evaluation = data.get("replicability_evaluation")
+                # 内容分析 - 新结构（使用camelCase匹配API返回）
+                result.short_topic = data.get("shortTopic")
+                result.summary_insight = data.get("summaryInsight")
+                result.optimization_suggestions = data.get("optimizationSuggestions")
 
             return result
         except json.JSONDecodeError as e:
@@ -271,21 +420,42 @@ class AIAnalysisService:
                             raw_response=data,
                         )
                         if analysis_type == "cover_analysis":
-                            # 封面分析7维度
-                            video_result.cover_composition = data.get("cover_composition")
-                            video_result.cover_main_element = data.get("cover_main_element")
-                            video_result.cover_color_scheme = data.get("cover_color_scheme")
-                            video_result.cover_visual_style = data.get("cover_visual_style")
-                            video_result.cover_mood_atmosphere = data.get("cover_mood_atmosphere")
-                            video_result.cover_visual_highlights = data.get("cover_visual_highlights", [])
-                            video_result.cover_audience_expectation = data.get("cover_audience_expectation")
+                            # 封面分析 - 新结构
+                            # 兼容旧格式缓存数据
+                            composition = data.get("composition") or {}
+                            elements = data.get("elements") or {}
+                            style = data.get("style") or {}
+                            appeal = data.get("appeal") or {}
+
+                            # 旧格式字段转换 (cover_composition -> composition.description)
+                            if not composition and data.get("cover_composition"):
+                                composition = {"description": data.get("cover_composition")}
+                            if not elements.get("subjects") and data.get("cover_main_element"):
+                                elements["subjects"] = data.get("cover_main_element")
+                            if not elements.get("color_palette") and data.get("cover_color_scheme"):
+                                elements["color_palette"] = data.get("cover_color_scheme")
+                            if not style.get("overall") and data.get("cover_visual_style"):
+                                style["overall"] = data.get("cover_visual_style")
+                            if not style.get("mood") and data.get("cover_mood_atmosphere"):
+                                style["mood"] = data.get("cover_mood_atmosphere")
+
+                            video_result.composition_rule = composition.get("rule")
+                            video_result.composition_desc = composition.get("description")
+                            video_result.elements_subjects = elements.get("subjects")
+                            video_result.elements_text = elements.get("text")
+                            video_result.elements_color_palette = elements.get("color_palette")
+                            video_result.elements_lighting = elements.get("lighting")
+                            video_result.style_overall = style.get("overall")
+                            video_result.style_mood = style.get("mood")
+                            video_result.appeal_attraction = appeal.get("attraction")
+                            video_result.appeal_hook = appeal.get("hook")
                             ai_result.cover_analysis = video_result
                         elif analysis_type == "content_analysis":
-                            # 内容分析4维度
-                            video_result.topic_summary = data.get("topic_summary")
-                            video_result.viral_logic_analysis = data.get("viral_logic_analysis")
-                            video_result.content_optimization_suggestions = data.get("content_optimization_suggestions")
-                            video_result.replicability_evaluation = data.get("replicability_evaluation")
+                            # 内容分析 - 新结构（兼容camelCase和snake_case）
+                            # 兼容旧格式缓存数据 (topic_summary -> shortTopic, viral_logic_analysis -> summaryInsight)
+                            video_result.short_topic = data.get("shortTopic") or data.get("short_topic") or data.get("topic_summary")
+                            video_result.summary_insight = data.get("summaryInsight") or data.get("summary_insight") or data.get("viral_logic_analysis")
+                            video_result.optimization_suggestions = data.get("optimizationSuggestions") or data.get("optimization_suggestions") or data.get("content_optimization_suggestions")
                             ai_result.content_analysis = video_result
 
                 return ai_result

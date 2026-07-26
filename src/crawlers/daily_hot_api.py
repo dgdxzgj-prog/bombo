@@ -13,6 +13,62 @@ from src.config import settings
 from src.crawlers.anti_crawler import get_anti_crawler
 
 
+# 赛道 -> B站分区ID 映射
+TRACK_RID_MAP = {
+    # 12个不变分区
+    "animation": 1,      # 动画
+    "music": 3,          # 音乐
+    "gaming": 4,         # 游戏
+    "entertainment": 5,  # 娱乐
+    "dance": 129,        # 舞蹈
+    "demon": 119,       # 鬼畜
+    "fashion": 155,      # 时尚
+    "knowledge": 36,     # 知识
+    # 4个新rid
+    "food": 211,         # 美食
+    "animal": 217,       # 动物圈
+    "auto": 223,         # 汽车
+    "sports": 234,        # 运动
+    # 剩余10个赛道
+    "anime": 13,         # 番剧
+    "china_original": 168,  # 国创
+    "art": 101,          # 艺术绘画
+    "documentary": 177,  # 纪录片
+    "film": 181,         # 影视解说
+    "life": 160,         # 生活
+    "movie": 178,        # 院线电影
+    "news": 201,         # 资讯
+    "software": 230,     # 软件应用
+    "tech": 188,         # 科技数码
+}
+
+# 赛道ID -> 赛道名称 映射
+TRACK_NAME_MAP = {
+    "animation": "动画",
+    "music": "音乐",
+    "gaming": "游戏",
+    "entertainment": "娱乐",
+    "dance": "舞蹈",
+    "demon": "鬼畜",
+    "fashion": "时尚",
+    "knowledge": "知识",
+    "food": "美食",
+    "animal": "动物圈",
+    "auto": "汽车",
+    "sports": "运动",
+    "anime": "番剧",
+    "china_original": "国创",
+    "art": "艺术",
+    "documentary": "纪录片",
+    "film": "影视",
+    "life": "生活",
+    "movie": "电影",
+    "news": "资讯",
+    "software": "软件应用",
+    "tech": "科技",
+}
+
+
 # 21个标准赛道及其细分赛道映射
 CHANNEL_MAPPING = {
     '动画': ['MAD·AMV', 'MMD·3D', '短片手书配音', '模玩周边', '特摄', '动漫杂谈', '动漫', '动画'],
@@ -90,6 +146,7 @@ class HotVideoItem:
     duration: int  # 视频时长(秒)
     tid: int  # 分区ID
     tname: str  # 分区名称（原始赛道，归类后可能变化）
+    tags: Optional[List[str]] = None  # 视频标签列表
 
 
 class DailyHotApiClient:
@@ -246,6 +303,7 @@ class DailyHotApiClient:
                     duration=item.get("duration", 0),
                     tid=item.get("tid", 0),
                     tname=item.get("tname", ""),
+                    tags=None,  # 热榜API不返回标签，需单独获取
                 )
 
                 if video.bvid:
@@ -354,3 +412,19 @@ class DailyHotApiClient:
             time.sleep(1)
 
         return all_videos
+
+    def get_region_ranking(self, rid: int, limit: int = 20) -> List[HotVideoItem]:
+        """
+        获取指定分区的热榜视频
+
+        Args:
+            rid: B站分区ID
+            limit: 返回数量上限
+
+        Returns:
+            分区热榜视频列表
+        """
+        url = f"https://api.bilibili.com/x/web-interface/ranking/v2?rid={rid}&type=all&day=1"
+
+        videos = self._fetch_bilibili_api(url, limit)
+        return videos if videos else []

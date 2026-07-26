@@ -73,10 +73,12 @@ class SnapshotService:
 
             return {
                 "bvid": bvid,
+                "author_mid": str(video_data.get("owner", {}).get("mid", "")),
                 "view_count": stat.get("view", 0),
                 "like_count": stat.get("like", 0),
                 "favorite_count": stat.get("favorite", 0),
                 "reply_count": stat.get("reply", 0),
+                "duration": video_data.get("duration", 0),
                 "cid": cid,
             }
 
@@ -510,19 +512,32 @@ class SnapshotService:
         }
 
     def _count_monitoring_videos(self, status: str = "monitoring") -> int:
-        """获取指定状态视频数量"""
+        """获取视频数量"""
         with get_db_session() as session:
-            result = session.execute(
-                text("SELECT COUNT(*) FROM monitor_pool WHERE status = :status"),
-                {"status": status}
-            ).scalar()
+            if status:
+                result = session.execute(
+                    text("SELECT COUNT(*) FROM monitor_pool WHERE status = :status"),
+                    {"status": status}
+                ).scalar()
+            else:
+                # 不区分状态，统计所有视频
+                result = session.execute(
+                    text("SELECT COUNT(*) FROM monitor_pool")
+                ).scalar()
             return result or 0
 
     def _fetch_monitoring_bvids(self, limit: int = 100, offset: int = 0, status: str = "monitoring") -> List[str]:
-        """分批获取指定状态的视频 bvid"""
+        """分批获取视频 bvid"""
         with get_db_session() as session:
-            results = session.execute(
-                text("SELECT bvid FROM monitor_pool WHERE status = :status LIMIT :limit OFFSET :offset"),
-                {"limit": limit, "offset": offset, "status": status}
-            ).fetchall()
+            if status:
+                results = session.execute(
+                    text("SELECT bvid FROM monitor_pool WHERE status = :status LIMIT :limit OFFSET :offset"),
+                    {"limit": limit, "offset": offset, "status": status}
+                ).fetchall()
+            else:
+                # 不区分状态，获取所有视频
+                results = session.execute(
+                    text("SELECT bvid FROM monitor_pool LIMIT :limit OFFSET :offset"),
+                    {"limit": limit, "offset": offset}
+                ).fetchall()
             return [r[0] for r in results]

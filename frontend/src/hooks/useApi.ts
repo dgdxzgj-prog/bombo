@@ -79,6 +79,18 @@ export function useUnlockChannel() {
   });
 }
 
+export function useUpdateChannelSortOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ channelId, sortOrder }: { channelId: string; sortOrder: number }) =>
+      api.updateChannelSortOrder(channelId, sortOrder),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.channels });
+    },
+  });
+}
+
 export function useCalibrateChannel() {
   const queryClient = useQueryClient();
 

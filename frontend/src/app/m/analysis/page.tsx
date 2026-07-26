@@ -269,9 +269,9 @@ function AnalysisContent() {
             <div className="mb-4">
               <h4 className="text-sm text-gray-500 mb-2">封面分析</h4>
               <div className="text-sm text-gray-700 space-y-1">
-                <p>主体元素：{analysisResult.cover_analysis.cover_main_element}</p>
-                <p>配色方案：{analysisResult.cover_analysis.cover_color_scheme}</p>
-                <p>视觉风格：{analysisResult.cover_analysis.cover_visual_style}</p>
+                <p>主体元素：{analysisResult.cover_analysis.elements?.subjects}</p>
+                <p>配色方案：{analysisResult.cover_analysis.elements?.color_palette}</p>
+                <p>视觉风格：{analysisResult.cover_analysis.style?.overall}</p>
               </div>
             </div>
           )}
@@ -279,9 +279,9 @@ function AnalysisContent() {
             <div>
               <h4 className="text-sm text-gray-500 mb-2">内容分析</h4>
               <div className="text-sm text-gray-700 space-y-1">
-                <p>话题总结：{analysisResult.content_analysis.topic_summary}</p>
-                {analysisResult.content_analysis.viral_logic_analysis && (
-                  <p>爆款逻辑：{analysisResult.content_analysis.viral_logic_analysis}</p>
+                <p>话题总结：{analysisResult.content_analysis.shortTopic}</p>
+                {analysisResult.content_analysis.summaryInsight && (
+                  <p>爆款逻辑：{analysisResult.content_analysis.summaryInsight}</p>
                 )}
               </div>
             </div>

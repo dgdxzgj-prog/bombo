@@ -87,3 +87,15 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Fade in out animation for toast */
+@keyframes fade-in-out {
+  0% { opacity: 0; transform: translate(-50%, -10px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+.animate-fade-in-out {
+  animation: fade-in-out 3s ease-in-out forwards;
+}

@@ -78,7 +78,10 @@ class ChannelConfigService:
                            cold_start_threshold, cold_start_hours,
                            weight_growth, weight_volume, weight_interaction,
                            decline_growth_threshold, param_version, effective_time,
-                           sample_size, is_locked, created_at, updated_at
+                           sample_size, is_locked, status, sort_order,
+                           created_at, updated_at,
+                           p_up, p_down, hysteresis_ratio, window_days, min_sample_count,
+                           t_up, t_down, t_up_min, t_down_min, last_threshold_update, threshold_sample_count
                     FROM channel_config
                     WHERE channel_id = :channel_id OR channel_name = :channel_id
                 """),
@@ -91,7 +94,7 @@ class ChannelConfigService:
             return self._row_to_config(result)
 
     def get_all_channels(self) -> List[ChannelConfig]:
-        """获取所有赛道配置"""
+        """获取所有赛道配置（仅返回created_by=1的赛道，按sort_order排序）"""
         with get_db_session() as session:
             results = session.execute(
                 text("""
@@ -101,16 +104,20 @@ class ChannelConfigService:
                            cold_start_threshold, cold_start_hours,
                            weight_growth, weight_volume, weight_interaction,
                            decline_growth_threshold, param_version, effective_time,
-                           sample_size, is_locked, created_at, updated_at
+                           sample_size, is_locked, status, sort_order,
+                           created_at, updated_at,
+                           p_up, p_down, hysteresis_ratio, window_days, min_sample_count,
+                           t_up, t_down, t_up_min, t_down_min, last_threshold_update, threshold_sample_count
                     FROM channel_config
-                    ORDER BY channel_id
+                    WHERE created_by = 1
+                    ORDER BY sort_order, channel_id
                 """)
             ).fetchall()
 
             return [self._row_to_config(row) for row in results]
 
     def get_unlocked_channels(self) -> List[ChannelConfig]:
-        """获取未锁定的赛道配置"""
+        """获取未锁定的赛道配置（仅返回created_by=1的赛道，按sort_order排序）"""
         with get_db_session() as session:
             results = session.execute(
                 text("""
@@ -120,10 +127,13 @@ class ChannelConfigService:
                            cold_start_threshold, cold_start_hours,
                            weight_growth, weight_volume, weight_interaction,
                            decline_growth_threshold, param_version, effective_time,
-                           sample_size, is_locked, created_at, updated_at
+                           sample_size, is_locked, status, sort_order,
+                           created_at, updated_at,
+                           p_up, p_down, hysteresis_ratio, window_days, min_sample_count,
+                           t_up, t_down, t_up_min, t_down_min, last_threshold_update, threshold_sample_count
                     FROM channel_config
-                    WHERE is_locked = FALSE
-                    ORDER BY channel_id
+                    WHERE is_locked = FALSE AND created_by = 1
+                    ORDER BY sort_order, channel_id
                 """)
             ).fetchall()
 
@@ -285,6 +295,20 @@ class ChannelConfigService:
             effective_time=row[13],
             sample_size=int(row[14] or 0),
             is_locked=bool(row[15] or False),
-            created_at=row[16],
-            updated_at=row[17],
+            status=row[16] or "active",
+            sort_order=int(row[17] or 0) if row[17] is not None else 0,
+            created_at=row[18],
+            updated_at=row[19],
+            # 赛道自适应阈值参数
+            p_up=float(row[20] or 0.90) if row[20] is not None else 0.90,
+            p_down=float(row[21] or 0.70) if row[21] is not None else 0.70,
+            hysteresis_ratio=float(row[22] or 0.75) if row[22] is not None else 0.75,
+            window_days=int(row[23] or 14) if row[23] is not None else 14,
+            min_sample_count=int(row[24] or 30) if row[24] is not None else 30,
+            t_up=int(row[25] or 0) if row[25] is not None else 0,
+            t_down=int(row[26] or 0) if row[26] is not None else 0,
+            t_up_min=int(row[27] or 100) if row[27] is not None else 100,
+            t_down_min=int(row[28] or 50) if row[28] is not None else 50,
+            last_threshold_update=row[29],
+            threshold_sample_count=int(row[30] or 0) if row[30] is not None else 0,
         )

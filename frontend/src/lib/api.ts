@@ -136,6 +136,12 @@ export const api = {
     await client.post(`/api/channels/${channelId}/unlock`);
   },
 
+  updateChannelSortOrder: async (channelId: string, sortOrder: number): Promise<void> => {
+    const token = localStorage.getItem("bombo_token");
+    const client = createApiClient(token);
+    await client.patch(`/api/channels/${channelId}/sort-order`, { sort_order: sortOrder });
+  },
+
   calibrateChannel: async (channelId: string): Promise<void> => {
     const token = localStorage.getItem("bombo_token");
     const client = createApiClient(token);
@@ -166,6 +172,27 @@ export const api = {
       params: { limit },
     });
     return response.data;
+  },
+
+  // System Config
+  getSystemConfigs: async (): Promise<{ configs: Array<{ key: string; value: string; description: string }> }> => {
+    const token = localStorage.getItem("bombo_token");
+    const client = createApiClient(token);
+    const response = await client.get("/api/system-config");
+    return response.data;
+  },
+
+  getSystemConfig: async (key: string): Promise<{ key: string; value: string; description: string }> => {
+    const token = localStorage.getItem("bombo_token");
+    const client = createApiClient(token);
+    const response = await client.get(`/api/system-config/${key}`);
+    return response.data;
+  },
+
+  updateSystemConfig: async (key: string, value: string): Promise<void> => {
+    const token = localStorage.getItem("bombo_token");
+    const client = createApiClient(token);
+    await client.put("/api/system-config", { key, value });
   },
 };
 

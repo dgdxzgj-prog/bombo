@@ -25,6 +25,8 @@ from src.services.permission_service import get_permission_service
 from src.services.subscription_service import get_subscription_service
 from src.models.ai_analysis import AIAnalysisResult
 from src.crawlers.video_updater import VideoUpdater
+from src.utils.database import get_db_session
+from sqlalchemy import text
 
 
 # 线程池用于执行同步爬虫调用
@@ -269,6 +271,7 @@ async def list_videos(
 async def list_featured_videos(
     channel: Optional[str] = None,
     limit: int = Query(50, le=100),
+    offset: int = Query(0, ge=0),
     authorization: str = Header(None),
 ):
     """获取已上榜视频列表（用于用户界面）- 支持分层权限控制"""
@@ -299,6 +302,7 @@ async def list_featured_videos(
     videos = service.get_featured_videos_by_channel(
         channel=channel or "",
         limit=actual_limit,
+        offset=offset,
     )
 
     # 构建返回数据
@@ -354,6 +358,50 @@ def cover_proxy(url: str = Query(..., description="B站封面图片URL")):
             "Access-Control-Allow-Origin": "*",
         }
     )
+
+
+@video_router.get("/avatar-proxy")
+def avatar_proxy(url: str = Query(..., description="B站头像图片URL")):
+    """
+    头像图片代理接口
+    解决B站图床防盗链403问题
+    后端请求图片并添加正确Referer头后返回给前端
+    """
+    import requests
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"avatar-proxy called with url: {url}")
+
+    # 允许的B站CDN域名
+    allowed_domains = ["i0.hdslb.com", "i1.hdslb.com", "i2.hdslb.com", "i3.hdslb.com", "avatar.hdslb.com"]
+    is_allowed = any(url.startswith(f"https://{domain}/") for domain in allowed_domains)
+    if not is_allowed:
+        raise HTTPException(status_code=400, detail="Only Bilibili avatars allowed")
+
+    headers = {
+        "Referer": "https://www.bilibili.com/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        logger.info(f"Avatar request status: {response.status_code}")
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch avatar image: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch avatar image")
+
+    return Response(
+        content=response.content,
+        media_type=response.headers.get("Content-Type", "image/jpeg"),
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
+
 
 @video_router.get("/user-status")
 async def get_user_status(
@@ -427,6 +475,14 @@ async def get_video(bvid: str, authorization: str = Header(None)):
 
     # 获取视频基本信息
     result = video.to_dict()
+
+    # 获取作者信息（头像、粉丝数、作品数）
+    if video.author_mid:
+        author_info = service.get_author_info(video.author_mid)
+        if author_info:
+            result["author_avatar"] = author_info.avatar
+            result["author_fans"] = author_info.fans
+            result["author_video_count"] = author_info.archive_count
 
     # 获取AI分析结果
     ai_service = get_ai_analysis_service()
@@ -558,6 +614,34 @@ async def list_channels(authorization: str = Header(None)):
     }
 
 
+@channel_router.get("/active")
+async def list_active_channels():
+    """获取有效赛道列表（用于移动端，无需认证）"""
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        results = session.execute(
+            text("""
+                SELECT cc.channel_id, cc.channel_name, cc.sort_order
+                FROM channel_config cc
+                JOIN track_rid_mapping trm ON cc.channel_id = trm.track_id
+                WHERE cc.status = 'active' AND cc.created_by = 1
+                ORDER BY cc.sort_order
+            """)
+        ).fetchall()
+
+        channels = [
+            {"channel_id": r[0], "channel_name": r[1], "sort_order": r[2]}
+            for r in results
+        ]
+
+        return {
+            "total": len(channels),
+            "channels": channels,
+        }
+
+
 @channel_router.get("/{channel_id}")
 async def get_channel(channel_id: str, authorization: str = Header(None)):
     """获取赛道详情"""
@@ -602,6 +686,31 @@ async def unlock_channel(channel_id: str, authorization: str = Header(None)):
 
     if not success:
         raise HTTPException(status_code=400, detail="Failed to unlock channel")
+
+    return {"success": True}
+
+
+class UpdateSortOrderRequest(BaseModel):
+    """更新排序请求"""
+    sort_order: int
+
+
+@channel_router.patch("/{channel_id}/sort-order")
+async def update_channel_sort_order(
+    channel_id: str,
+    request: UpdateSortOrderRequest,
+    authorization: str = Header(None),
+):
+    """更新赛道排序值"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_channels"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    service = ChannelConfigService()
+    success = service.update_channel(channel_id, sort_order=request.sort_order)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update sort order")
 
     return {"success": True}
 
@@ -664,29 +773,39 @@ def _build_analysis_response(analysis: "AIAnalysisResult") -> dict:
         "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
     }
 
-    # 封面分析（7个维度）
+    # 封面分析 - 新结构
     if analysis.cover_analysis:
         cover = analysis.cover_analysis
         response["cover_analysis"] = {
-            "cover_composition": cover.cover_composition,
-            "cover_main_element": cover.cover_main_element,
-            "cover_color_scheme": cover.cover_color_scheme,
-            "cover_visual_style": cover.cover_visual_style,
-            "cover_mood_atmosphere": cover.cover_mood_atmosphere,
-            "cover_visual_highlights": cover.cover_visual_highlights or [],
-            "cover_audience_expectation": cover.cover_audience_expectation,
+            "composition": {
+                "rule": cover.composition_rule,
+                "description": cover.composition_desc,
+            },
+            "elements": {
+                "subjects": cover.elements_subjects,
+                "text": cover.elements_text,
+                "color_palette": cover.elements_color_palette,
+                "lighting": cover.elements_lighting,
+            },
+            "style": {
+                "overall": cover.style_overall,
+                "mood": cover.style_mood,
+            },
+            "appeal": {
+                "attraction": cover.appeal_attraction,
+                "hook": cover.appeal_hook,
+            },
         }
     else:
         response["cover_analysis"] = None
 
-    # 内容分析（4个维度）
+    # 内容分析 - 新结构（使用camelCase匹配前端期望）
     if analysis.content_analysis:
         content = analysis.content_analysis
         response["content_analysis"] = {
-            "topic_summary": content.topic_summary,
-            "viral_logic_analysis": content.viral_logic_analysis,
-            "content_optimization_suggestions": content.content_optimization_suggestions,
-            "replicability_evaluation": content.replicability_evaluation,
+            "shortTopic": content.short_topic,
+            "summaryInsight": content.summary_insight,
+            "optimizationSuggestions": content.optimization_suggestions,
         }
     else:
         response["content_analysis"] = None
@@ -764,6 +883,12 @@ async def get_dashboard_stats(authorization: str = Header(None)):
     channel_count = len(channels)
     locked_count = sum(1 for c in channels if c.is_locked)
 
+    # 获取有AI分析的视频数量
+    with get_db_session() as session:
+        ai_analyzed_count = session.execute(
+            text("SELECT COUNT(DISTINCT bvid) FROM ai_cache")
+        ).scalar() or 0
+
     return {
         "videos": {
             "monitoring": monitoring_count,
@@ -776,6 +901,7 @@ async def get_dashboard_stats(authorization: str = Header(None)):
             "locked": locked_count,
             "unlocked": channel_count - locked_count,
         },
+        "ai_analyzed": ai_analyzed_count,
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -1044,3 +1170,199 @@ async def get_my_cost(
     user_cost = service.get_user_cost(user.id, days)
 
     return user_cost
+
+
+# ============== AI Prompt模板管理API ==============
+
+class PromptTemplateUpdateRequest(BaseModel):
+    name: str
+    content: str
+    variables: List[str]
+    description: str
+
+
+class PromptTemplateToggleRequest(BaseModel):
+    is_active: bool
+
+
+prompt_template_router = APIRouter(prefix="/api/admin/prompt-templates", tags=["AI模板管理"])
+
+
+@prompt_template_router.get("")
+async def list_prompt_templates(authorization: str = Header(None)):
+    """获取所有Prompt模板列表"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_prompt_templates"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.services.prompt_template_service import get_prompt_template_service
+    service = get_prompt_template_service()
+    templates = service.get_all_templates()
+
+    return {
+        "total": len(templates),
+        "templates": templates,
+    }
+
+
+@prompt_template_router.get("/{template_type}")
+async def get_prompt_template(
+    template_type: str,
+    authorization: str = Header(None),
+):
+    """获取指定类型的Prompt模板"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_prompt_templates"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.services.prompt_template_service import get_prompt_template_service
+    service = get_prompt_template_service()
+    template = service.get_template_by_type(template_type)
+
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    return template
+
+
+@prompt_template_router.put("/{template_type}")
+async def update_prompt_template(
+    template_type: str,
+    request: PromptTemplateUpdateRequest,
+    authorization: str = Header(None),
+):
+    """更新Prompt模板"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_prompt_templates"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.services.prompt_template_service import get_prompt_template_service
+    service = get_prompt_template_service()
+
+    success = service.update_template(
+        template_type=template_type,
+        name=request.name,
+        content=request.content,
+        variables=request.variables,
+        description=request.description,
+    )
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update template")
+
+    return {"success": True, "message": "Template updated successfully"}
+
+
+@prompt_template_router.post("/{template_type}/toggle")
+async def toggle_prompt_template(
+    template_type: str,
+    request: PromptTemplateToggleRequest,
+    authorization: str = Header(None),
+):
+    """切换模板激活状态"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_prompt_templates"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.services.prompt_template_service import get_prompt_template_service
+    service = get_prompt_template_service()
+
+    success = service.toggle_active(template_type, request.is_active)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to toggle template")
+
+    return {"success": True, "message": f"Template {'activated' if request.is_active else 'deactivated'}" }
+
+
+# 系统配置路由
+system_config_router = APIRouter(prefix="/api/system-config", tags=["系统配置"])
+
+
+class SystemConfigUpdateRequest(BaseModel):
+    """更新系统配置请求"""
+    key: str
+    value: str
+
+
+@system_config_router.get("/{config_key}")
+async def get_system_config(
+    config_key: str,
+    authorization: str = Header(None),
+):
+    """获取系统配置"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_system_config"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        result = session.execute(
+            text("SELECT config_key, config_value, description FROM system_config WHERE config_key = :config_key"),
+            {"config_key": config_key}
+        ).fetchone()
+
+        if result is None:
+            raise HTTPException(status_code=404, detail="Config not found")
+
+        return {
+            "key": result[0],
+            "value": result[1] or "",
+            "description": result[2],
+        }
+
+
+@system_config_router.get("")
+async def list_system_configs(
+    authorization: str = Header(None),
+):
+    """获取所有系统配置"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_system_config"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        results = session.execute(
+            text("SELECT config_key, config_value, description FROM system_config ORDER BY config_key")
+        ).fetchall()
+
+        return {
+            "configs": [
+                {"key": r[0], "value": r[1] or "", "description": r[2]}
+                for r in results
+            ]
+        }
+
+
+@system_config_router.put("")
+async def update_system_config(
+    request: SystemConfigUpdateRequest,
+    authorization: str = Header(None),
+):
+    """更新系统配置"""
+    user = get_current_user(authorization)
+    if not user or not user.has_permission("manage_system_config"):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        result = session.execute(
+            text("""
+                UPDATE system_config
+                SET config_value = :value, updated_at = :updated_at
+                WHERE config_key = :key
+            """),
+            {"key": request.key, "value": request.value, "updated_at": datetime.now()}
+        )
+
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Config not found")
+
+        return {"success": True, "message": "Config updated successfully"}

@@ -42,12 +42,20 @@ export interface Video {
   like_count: number;
   favorite_count: number;
   reply_count: number;
+  coin_count: number;
+  share_count: number;
+  danmu_count?: number;
+  online_count?: number;
+  max_online_today?: number;
   pubdate?: string;
   cover_url?: string;
+  duration?: number;
+  tags?: string[];
   status: VideoStatus;
   first_seen: string;
   last_collected?: string;
   ai_analysis?: AIAnalysis;
+  author_fans?: number;
 }
 
 export interface VideoListResponse {
@@ -73,6 +81,11 @@ export interface ChannelConfig {
   effective_time?: string;
   sample_size: number;
   is_locked: boolean;
+  sort_order?: number;
+  status?: "active" | "inactive";
+  t_up?: number;
+  t_down?: number;
+  threshold_sample_count?: number;
 }
 
 export interface ChannelListResponse {
@@ -93,20 +106,31 @@ export interface HotJudgeResponse {
 
 // AI Analysis types
 export interface AICoverAnalysis {
-  cover_composition: string | null;
-  cover_main_element: string | null;
-  cover_color_scheme: string | null;
-  cover_visual_style: string | null;
-  cover_mood_atmosphere: string | null;
-  cover_visual_highlights: string[];
-  cover_audience_expectation: string | null;
+  composition?: {
+    rule?: string;
+    description?: string;
+  };
+  elements?: {
+    subjects?: string;
+    text?: string;
+    color_palette?: string;
+    lighting?: string;
+  };
+  style?: {
+    overall?: string;
+    mood?: string;
+  };
+  appeal?: {
+    attraction?: string;
+    hook?: string;
+  };
 }
 
 export interface AIContentAnalysis {
-  topic_summary: string | null;
-  viral_logic_analysis: string | null;
-  content_optimization_suggestions: string | null;
-  replicability_evaluation: string | null;
+  shortTopic?: string;
+  summaryInsight?: string;
+  optimizationSuggestions?: string;
+  replicability_evaluation?: string;
 }
 
 export interface AIAnalysis {
@@ -134,6 +158,7 @@ export interface DashboardStats {
     locked: number;
     unlocked: number;
   };
+  ai_analyzed: number;
   timestamp: string;
 }
 

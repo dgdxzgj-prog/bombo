@@ -70,7 +70,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ bvid: st
             {video.cover_url && (
               <div className="w-full lg:w-64 aspect-video bg-dark-bg rounded-lg overflow-hidden flex-shrink-0">
                 <img
-                  src={video.cover_url}
+                  src={`/api/videos/cover-proxy?url=${encodeURIComponent(video.cover_url.replace(/^http:\/\//i, "https://"))}`}
                   alt={video.title}
                   className="w-full h-full object-cover"
                 />
@@ -108,21 +108,13 @@ export default function VideoDetailPage({ params }: { params: Promise<{ bvid: st
 
                 <div className="bg-dark-bg p-4 rounded-lg">
                   <div className="flex items-center gap-2 text-dark-textMuted mb-1">
-                    {video.growth_rate >= 0 ? (
-                      <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4 text-red-400" />
-                    )}
-                    <span className="text-sm">增速</span>
+                    <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="text-sm">在线人数</span>
                   </div>
-                  <p
-                    className={clsx(
-                      "text-2xl font-bold",
-                      video.growth_rate >= 0 ? "text-emerald-400" : "text-red-400"
-                    )}
-                  >
-                    {video.growth_rate >= 0 ? "+" : ""}
-                    {video.growth_rate}%
+                  <p className="text-2xl font-bold text-white">
+                    {video.online_count?.toLocaleString() || 0}
                   </p>
                 </div>
 
@@ -221,36 +213,49 @@ export default function VideoDetailPage({ params }: { params: Promise<{ bvid: st
           {aiAnalysis ? (
             <div className="space-y-4">
               {/* Cover Analysis */}
-              {aiAnalysis.cover_analysis && (
+              {aiAnalysis.cover_analysis && aiAnalysis.cover_analysis.composition && (
                 <div className="bg-dark-bg rounded-lg p-4">
                   <h3 className="text-sm font-medium text-yellow-400 mb-3">封面分析</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                     <div>
                       <span className="text-dark-textMuted">构图:</span>
-                      <span className="text-white ml-1">{aiAnalysis.cover_analysis.cover_composition || '-'}</span>
+                      <span className="text-white ml-1">
+                        {aiAnalysis.cover_analysis.composition?.description || '-'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-dark-textMuted">色彩:</span>
-                      <span className="text-white ml-1">{aiAnalysis.cover_analysis.cover_color_scheme || '-'}</span>
+                      <span className="text-white ml-1">
+                        {aiAnalysis.cover_analysis.elements?.color_palette || '-'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-dark-textMuted">风格:</span>
-                      <span className="text-white ml-1">{aiAnalysis.cover_analysis.cover_visual_style || '-'}</span>
+                      <span className="text-white ml-1">
+                        {aiAnalysis.cover_analysis.style?.overall || '-'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-dark-textMuted">氛围:</span>
-                      <span className="text-white ml-1">{aiAnalysis.cover_analysis.cover_mood_atmosphere || '-'}</span>
+                      <span className="text-white ml-1">
+                        {aiAnalysis.cover_analysis.style?.mood || '-'}
+                      </span>
                     </div>
                   </div>
-                  {aiAnalysis.cover_analysis.cover_visual_highlights?.length > 0 && (
+                  {(aiAnalysis.cover_analysis.elements?.subjects || aiAnalysis.cover_analysis.elements?.text) && (
                     <div className="mt-2">
-                      <span className="text-dark-textMuted text-sm">视觉亮点:</span>
+                      <span className="text-dark-textMuted text-sm">视觉元素:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {aiAnalysis.cover_analysis.cover_visual_highlights.map((highlight: string, idx: number) => (
-                          <span key={idx} className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
-                            {highlight}
+                        {aiAnalysis.cover_analysis.elements?.subjects && (
+                          <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+                            {aiAnalysis.cover_analysis.elements.subjects}
                           </span>
-                        ))}
+                        )}
+                        {aiAnalysis.cover_analysis.elements?.text && (
+                          <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+                            {aiAnalysis.cover_analysis.elements.text}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -264,27 +269,29 @@ export default function VideoDetailPage({ params }: { params: Promise<{ bvid: st
                   <div className="space-y-2 text-sm">
                     <div>
                       <span className="text-dark-textMuted">选题:</span>
-                      <span className="text-white ml-1">{aiAnalysis.content_analysis.topic_summary || '-'}</span>
+                      <span className="text-white ml-1">
+                        {aiAnalysis.content_analysis.shortTopic || '-'}
+                      </span>
                     </div>
-                    {aiAnalysis.content_analysis.viral_logic_analysis && (
+                    {aiAnalysis.content_analysis.summaryInsight && (
                       <div className="mt-3">
-                        <span className="text-dark-textMuted text-sm">爆款逻辑分析:</span>
-                        <p className="text-white mt-1 whitespace-pre-wrap">{aiAnalysis.content_analysis.viral_logic_analysis}</p>
+                        <span className="text-dark-textMuted text-sm">内容洞察:</span>
+                        <p className="text-white mt-1 whitespace-pre-wrap">
+                          {aiAnalysis.content_analysis.summaryInsight}
+                        </p>
                       </div>
                     )}
                     <div>
                       <span className="text-dark-textMuted">优化建议:</span>
-                      <span className="text-white ml-1">{aiAnalysis.content_analysis.content_optimization_suggestions || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-dark-textMuted">可复制性:</span>
-                      <span className="text-white ml-1">{aiAnalysis.content_analysis.replicability_evaluation || '-'}</span>
+                      <span className="text-white ml-1">
+                        {aiAnalysis.content_analysis.optimizationSuggestions || '-'}
+                      </span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {!aiAnalysis.cover_analysis && !aiAnalysis.content_analysis && (
+              {(!aiAnalysis.cover_analysis?.composition && !aiAnalysis.content_analysis?.shortTopic) && (
                 <p className="text-dark-textMuted text-center py-4">暂无AI分析结果</p>
               )}
             </div>

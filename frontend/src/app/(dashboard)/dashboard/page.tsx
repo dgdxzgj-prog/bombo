@@ -47,10 +47,10 @@ export default function DashboardPage() {
             subtitle="累计识别爆款"
           />
           <StatCard
-            title="赛道数量"
-            value={stats?.channels.total ?? "-"}
+            title="AI分析视频"
+            value={stats?.ai_analyzed ?? "-"}
             icon={BarChart3}
-            subtitle={`${stats?.channels.locked ?? 0} 个已锁定`}
+            subtitle="已完成AI分析的视频"
           />
           <StatCard
             title="更新时间"

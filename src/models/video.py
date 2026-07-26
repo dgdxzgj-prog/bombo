@@ -4,7 +4,27 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
+
+
+def _format_datetime(dt) -> Optional[str]:
+    """将datetime对象或字符串转换为ISO格式字符串"""
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        return dt.isoformat()
+    if isinstance(dt, str):
+        # 尝试解析字符串
+        try:
+            # 如果已经是ISO格式，直接返回
+            if "T" in dt or " " in dt:
+                return dt
+            # 尝试解析为datetime
+            parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+            return parsed.isoformat()
+        except (ValueError, AttributeError):
+            return dt
+    return str(dt)
 
 
 class VideoStatus(str, Enum):
@@ -20,6 +40,7 @@ class Video:
     bvid: str
     title: str = ""
     author: str = ""
+    author_mid: Optional[str] = None  # UP主MID
     channel: str = ""
     keyword: str = ""
 
@@ -32,11 +53,17 @@ class Video:
     like_count: int = 0
     favorite_count: int = 0
     reply_count: int = 0
+    coin_count: int = 0  # 投币数
+    share_count: int = 0  # 分享数
+    danmu_count: int = 0  # 弹幕数
     online_count: int = 0  # 在线观看人数
+    max_online_today: int = 0  # 当日最大在线人数
 
     # 视频元数据
     pubdate: Optional[datetime] = None
     cover_url: Optional[str] = None
+    duration: int = 0  # 视频时长(秒)
+    tags: Optional[List[str]] = None  # 视频标签列表
 
     # 状态管理
     status: VideoStatus = VideoStatus.MONITORING
@@ -79,6 +106,7 @@ class Video:
             "bvid": self.bvid,
             "title": self.title,
             "author": self.author,
+            "author_mid": self.author_mid,
             "channel": self.channel,
             "keyword": self.keyword,
             "view_yesterday": self.view_yesterday,
@@ -87,14 +115,20 @@ class Video:
             "like_count": self.like_count,
             "favorite_count": self.favorite_count,
             "reply_count": self.reply_count,
+            "coin_count": self.coin_count,
+            "share_count": self.share_count,
+            "danmu_count": self.danmu_count,
             "online_count": self.online_count,
-            "pubdate": self.pubdate.isoformat() if self.pubdate else None,
+            "max_online_today": self.max_online_today,
+            "pubdate": _format_datetime(self.pubdate),
             "cover_url": self.cover_url,
+            "duration": self.duration,
+            "tags": self.tags,
             "status": self.status.value if isinstance(self.status, VideoStatus) else self.status,
-            "first_seen": self.first_seen.isoformat() if self.first_seen else None,
-            "last_collected": self.last_collected.isoformat() if self.last_collected else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "first_seen": _format_datetime(self.first_seen),
+            "last_collected": _format_datetime(self.last_collected),
+            "created_at": _format_datetime(self.created_at),
+            "updated_at": _format_datetime(self.updated_at),
         }
 
     @classmethod
@@ -129,6 +163,7 @@ class Video:
             bvid=data["bvid"],
             title=data.get("title", ""),
             author=data.get("author", ""),
+            author_mid=data.get("author_mid"),
             channel=data.get("channel", ""),
             keyword=data.get("keyword", ""),
             view_yesterday=data.get("view_yesterday", 0),
@@ -137,9 +172,15 @@ class Video:
             like_count=data.get("like_count", 0),
             favorite_count=data.get("favorite_count", 0),
             reply_count=data.get("reply_count", 0),
+            coin_count=data.get("coin_count", 0),
+            share_count=data.get("share_count", 0),
+            danmu_count=data.get("danmu_count", 0),
             online_count=data.get("online_count", 0),
+            max_online_today=data.get("max_online_today", 0),
             pubdate=pubdate,
             cover_url=data.get("cover_url"),
+            duration=data.get("duration", 0),
+            tags=data.get("tags"),
             status=status,
             first_seen=first_seen or datetime.now(),
             last_collected=last_collected,

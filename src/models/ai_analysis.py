@@ -12,31 +12,26 @@ class VideoAnalysisResult:
     bvid: str
     analysis_type: str  # "cover", "content"
 
-    # ========== 封面分析 (7个维度) ==========
-    # 第一维度：构图手法
-    cover_composition: Optional[str] = None  # 中心构图法、三分法、对称构图、对角线构图等
-    # 第二维度：主体元素
-    cover_main_element: Optional[str] = None  # 单人半身女性精致妆容画面、大号文字标题、产品实拍图等
-    # 第三维度：色彩方案
-    cover_color_scheme: Optional[str] = None  # 粉橙为主暖色调、高饱和色彩对比、低饱和温柔色系等
-    # 第四维度：视觉风格
-    cover_visual_style: Optional[str] = None  # 精致高级感、清新自然风、炫酷科技感、温馨治愈风格等
-    # 第五维度：情绪氛围
-    cover_mood_atmosphere: Optional[str] = None  # 期待、好奇、惊喜、温暖、紧张等
-    # 第六维度：视觉亮点
-    cover_visual_highlights: List[str] = field(default_factory=list)  # 博主直视镜头、超大号标题文字、强对比撞色设计等
-    # 第七维度：观众预期
-    cover_audience_expectation: Optional[str] = None  # 妆容教学、产品测评、情感故事分享等
+    # ========== 封面分析 (新模板) ==========
+    # 构图
+    composition_rule: Optional[str] = None  # 构图法则
+    composition_desc: Optional[str] = None  # 构图描述
+    # 元素
+    elements_subjects: Optional[str] = None  # 主体/人物
+    elements_text: Optional[str] = None  # 文字内容
+    elements_color_palette: Optional[str] = None  # 主色调
+    elements_lighting: Optional[str] = None  # 光照风格
+    # 风格
+    style_overall: Optional[str] = None  # 整体视觉风格
+    style_mood: Optional[str] = None  # 情绪/氛围
+    # 吸引力
+    appeal_attraction: Optional[str] = None  # 最吸引眼球的亮点
+    appeal_hook: Optional[str] = None  # 用户预期内容
 
-    # ========== 内容分析 (4个维度) ==========
-    # 第一维度：选题总结
-    topic_summary: Optional[str] = None  # 一句话概括，不超过20个字
-    # 第二维度：爆款逻辑分析
-    viral_logic_analysis: Optional[str] = None  # 深度拆解，不少于250字
-    # 第三维度：优化建议
-    content_optimization_suggestions: Optional[str] = None  # 可落地执行的内容改进方案
-    # 第四维度：可复制性评估
-    replicability_evaluation: Optional[str] = None  # 高/中/低 + 简短说明
+    # ========== 内容分析 (新模板) ==========
+    short_topic: Optional[str] = None  # 核心选题（一句话，不超过20字）
+    summary_insight: Optional[str] = None  # 爆款分析报告
+    optimization_suggestions: Optional[str] = None  # 优化建议
 
     # 原始响应
     raw_response: Optional[Dict[str, Any]] = None
@@ -49,19 +44,29 @@ class VideoAnalysisResult:
         return {
             "bvid": self.bvid,
             "analysis_type": self.analysis_type,
-            # 封面分析7维度
-            "cover_composition": self.cover_composition,
-            "cover_main_element": self.cover_main_element,
-            "cover_color_scheme": self.cover_color_scheme,
-            "cover_visual_style": self.cover_visual_style,
-            "cover_mood_atmosphere": self.cover_mood_atmosphere,
-            "cover_visual_highlights": self.cover_visual_highlights,
-            "cover_audience_expectation": self.cover_audience_expectation,
-            # 内容分析4维度
-            "topic_summary": self.topic_summary,
-            "viral_logic_analysis": self.viral_logic_analysis,
-            "content_optimization_suggestions": self.content_optimization_suggestions,
-            "replicability_evaluation": self.replicability_evaluation,
+            # 封面分析 - 新结构
+            "composition": {
+                "rule": self.composition_rule,
+                "description": self.composition_desc,
+            },
+            "elements": {
+                "subjects": self.elements_subjects,
+                "text": self.elements_text,
+                "color_palette": self.elements_color_palette,
+                "lighting": self.elements_lighting,
+            },
+            "style": {
+                "overall": self.style_overall,
+                "mood": self.style_mood,
+            },
+            "appeal": {
+                "attraction": self.appeal_attraction,
+                "hook": self.appeal_hook,
+            },
+            # 内容分析 - 新结构（使用camelCase匹配API返回格式）
+            "shortTopic": self.short_topic,
+            "summaryInsight": self.summary_insight,
+            "optimizationSuggestions": self.optimization_suggestions,
             # 元数据
             "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
         }

@@ -7,12 +7,18 @@ from typing import List, Optional, Callable, Generator, Any, Dict
 from dataclasses import dataclass
 
 from bilibili_api import video, Credential
-from bilibili_api import search as bilibili_search
 from bilibili_api.exceptions import ResponseException, NetworkException
+
+# 尝试导入 search 模块，如果不存在则设为 None
+try:
+    from bilibili_api import search as bilibili_search
+except ImportError:
+    bilibili_search = None
 
 from src.config import settings
 from src.crawlers.anti_crawler import get_anti_crawler
 from src.crawlers.daily_hot_api import normalize_channel
+from src.crawlers.author_info_collector import AuthorInfoCollector
 from src.models.video import Video, VideoStatus
 from src.services.monitor_pool_service import MonitorPoolService
 from src.utils.logger import safe_str
@@ -40,13 +46,14 @@ class VideoDetail:
     bvid: str
     title: str
     author: str
-    channel: str
-    view_count: int
-    like_count: int
-    favorite_count: int
-    reply_count: int
-    pubdate: int  # Unix时间戳
-    cover_url: str
+    author_mid: str = ""  # UP主MID
+    channel: str = ""
+    view_count: int = 0
+    like_count: int = 0
+    favorite_count: int = 0
+    reply_count: int = 0
+    pubdate: int = 0  # Unix时间戳
+    cover_url: str = ""
     cid: int = 0  # 视频分P cid，用于获取在线人数
 
 
@@ -65,6 +72,7 @@ class VideoDiscoverer:
         self.min_view_count = min_view_count
         self.min_like_count = min_like_count
         self.anti_crawler = get_anti_crawler()
+        self.author_collector = AuthorInfoCollector(credential=self.credential)
 
     def _parse_cookie(self, cookie_str: str) -> Dict[str, str]:
         """解析Cookie字符串为字典"""
@@ -108,6 +116,10 @@ class VideoDiscoverer:
     ) -> List[VideoSearchResult]:
         """异步搜索视频（延时由调用方控制）"""
         try:
+            # 如果 bilibili_search 模块不可用，使用直接 HTTP 请求
+            if bilibili_search is None:
+                return await self._search_videos_direct(keyword, page, page_size)
+
             search_data = await bilibili_search.search(keyword=keyword, search_type=bilibili_search.SearchObjectType.VIDEO)
             results = []
 
@@ -147,6 +159,63 @@ class VideoDiscoverer:
             print(f"Search error: {e}")
             return []
 
+    async def _search_videos_direct(
+        self,
+        keyword: str,
+        page: int = 1,
+        page_size: int = 20
+    ) -> List[VideoSearchResult]:
+        """直接使用 HTTP 请求搜索视频（B站搜索API）"""
+        import aiohttp
+        import urllib.parse
+
+        results = []
+        try:
+            # B站搜索 API
+            search_url = "https://api.bilibili.com/x/web-interface/search/type"
+            params = {
+                "search_type": "video",
+                "keyword": keyword,
+                "page": page,
+                "pagesize": page_size,
+            }
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://www.bilibili.com",
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(search_url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        return []
+                    data = await resp.json()
+
+            if data.get("code") != 0:
+                return []
+
+            result_list = data.get("data", {}).get("result", [])
+
+            for video_data in result_list:
+                # 过滤非视频类型
+                if video_data.get("type") != "video":
+                    continue
+
+                results.append(VideoSearchResult(
+                    bvid=video_data.get("bvid", ""),
+                    title=video_data.get("title", "").replace("<em class=\"search-resulthighlight\">", "").replace("</em>", ""),
+                    author=video_data.get("author", ""),
+                    view_count=video_data.get("play", 0),
+                    like_count=video_data.get("like", 0),
+                    pubdate=video_data.get("pubdate", 0),
+                ))
+
+            return results
+
+        except Exception as e:
+            print(f"Direct search error: {e}")
+            return []
+
     def search_videos(
         self,
         keyword: str,
@@ -177,6 +246,7 @@ class VideoDiscoverer:
                 bvid=bvid,
                 title=video_data.get("title", ""),
                 author=video_data.get("owner", {}).get("name", ""),
+                author_mid=str(video_data.get("owner", {}).get("mid", "")),
                 channel=video_data.get("tname", ""),
                 view_count=stat.get("view", 0),
                 like_count=stat.get("like", 0),
@@ -298,6 +368,7 @@ class VideoDiscoverer:
             bvid=detail.bvid,
             title=detail.title,
             author=detail.author,
+            author_mid=detail.author_mid or None,
             channel=normalized_channel,
             keyword=keyword,
             view_yesterday=0,
@@ -342,6 +413,13 @@ class VideoDiscoverer:
                     continue
 
                 self.monitor_service.add_video(video)
+                # 同时写入video_channel表
+                self.monitor_service.add_video_channel(video.bvid, video.channel)
+
+                # 设置UP主信息采集标记（异步采集）
+                if video.author_mid:
+                    self.monitor_service.set_need_author_collect(video.bvid)
+
                 success_count += 1
 
             except ValueError:
@@ -382,6 +460,13 @@ class VideoDiscoverer:
                     continue
 
                 self.monitor_service.add_video(video)
+                # 同时写入video_channel表
+                self.monitor_service.add_video_channel(video.bvid, video.channel)
+
+                # 设置UP主信息采集标记（异步采集）
+                if video.author_mid:
+                    self.monitor_service.set_need_author_collect(video.bvid)
+
                 success_count += 1
 
             except ValueError:

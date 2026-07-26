@@ -37,6 +37,21 @@ class ChannelConfig:
     effective_time: Optional[datetime] = None
     sample_size: int = 0
     is_locked: bool = False
+    status: str = "active"  # 赛道状态: active, inactive
+    sort_order: int = 0  # 排序值
+
+    # 赛道自适应阈值参数
+    p_up: float = 0.90              # 爆款上线分位数
+    p_down: float = 0.70            # 衰退下线分位数
+    hysteresis_ratio: float = 0.75   # 滞回系数 T_down = T_up * hysteresis_ratio
+    window_days: int = 14           # 样本窗口天数
+    min_sample_count: int = 30      # 最小样本数量
+    t_up: int = 0                   # 爆款阈值（峰值在线人数）
+    t_down: int = 0                 # 衰退阈值
+    t_up_min: int = 100             # 爆款阈值保底值
+    t_down_min: int = 50            # 衰退阈值保底值
+    last_threshold_update: Optional[datetime] = None  # 最后阈值更新时间
+    threshold_sample_count: int = 0  # 阈值计算样本数
 
     # 时间戳
     created_at: datetime = field(default_factory=datetime.now)
@@ -61,6 +76,20 @@ class ChannelConfig:
             "effective_time": self.effective_time.isoformat() if self.effective_time else None,
             "sample_size": self.sample_size,
             "is_locked": self.is_locked,
+            "status": self.status,
+            "sort_order": self.sort_order,
+            # 赛道自适应阈值参数
+            "p_up": self.p_up,
+            "p_down": self.p_down,
+            "hysteresis_ratio": self.hysteresis_ratio,
+            "window_days": self.window_days,
+            "min_sample_count": self.min_sample_count,
+            "t_up": self.t_up,
+            "t_down": self.t_down,
+            "t_up_min": self.t_up_min,
+            "t_down_min": self.t_down_min,
+            "last_threshold_update": self.last_threshold_update.isoformat() if self.last_threshold_update else None,
+            "threshold_sample_count": self.threshold_sample_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -71,6 +100,10 @@ class ChannelConfig:
         effective_time = data.get("effective_time")
         if isinstance(effective_time, str):
             effective_time = datetime.fromisoformat(effective_time.replace("Z", "+00:00"))
+
+        last_threshold_update = data.get("last_threshold_update")
+        if isinstance(last_threshold_update, str):
+            last_threshold_update = datetime.fromisoformat(last_threshold_update.replace("Z", "+00:00"))
 
         created_at = data.get("created_at")
         if isinstance(created_at, str):
@@ -97,6 +130,20 @@ class ChannelConfig:
             effective_time=effective_time,
             sample_size=int(data.get("sample_size", 0)),
             is_locked=bool(data.get("is_locked", False)),
+            status=data.get("status", "active"),
+            sort_order=int(data.get("sort_order", 0)),
+            # 赛道自适应阈值参数
+            p_up=float(data.get("p_up", 0.90)),
+            p_down=float(data.get("p_down", 0.70)),
+            hysteresis_ratio=float(data.get("hysteresis_ratio", 0.75)),
+            window_days=int(data.get("window_days", 14)),
+            min_sample_count=int(data.get("min_sample_count", 30)),
+            t_up=int(data.get("t_up", 0)),
+            t_down=int(data.get("t_down", 0)),
+            t_up_min=int(data.get("t_up_min", 100)),
+            t_down_min=int(data.get("t_down_min", 50)),
+            last_threshold_update=last_threshold_update,
+            threshold_sample_count=int(data.get("threshold_sample_count", 0)),
             created_at=created_at or datetime.now(),
             updated_at=updated_at or datetime.now(),
         )

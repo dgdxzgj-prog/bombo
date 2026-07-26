@@ -91,6 +91,7 @@ class VideoUpdater:
                 "bvid": bvid,
                 "title": video_data.get("title", ""),
                 "author": video_data.get("owner", {}).get("name", ""),
+                "author_mid": str(video_data.get("owner", {}).get("mid", "")),
                 "channel": video_data.get("tname", ""),
                 "view_count": stat.get("view", 0),
                 "like_count": stat.get("like", 0),
@@ -263,6 +264,11 @@ class VideoUpdater:
 
             if not success:
                 return {"success": False, "error": "Failed to update database"}
+
+            # 更新作者MID（仅当监控池中还没有时）
+            author_mid = detail.get("author_mid")
+            if author_mid:
+                self.monitor_service.update_author_mid_if_null(bvid, author_mid)
 
             self.monitor_service.calculate_growth_rate(bvid)
 

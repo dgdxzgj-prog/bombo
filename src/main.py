@@ -19,6 +19,8 @@ from src.api.api_router import (
     dashboard_router,
     subscribe_router,
     cost_router,
+    prompt_template_router,
+    system_config_router,
 )
 from src.tasks.video_tasks import init_video_tasks
 from src.tasks.subscription_tasks import init_subscription_tasks
@@ -65,6 +67,8 @@ app.include_router(user_router)
 app.include_router(dashboard_router)
 app.include_router(subscribe_router)
 app.include_router(cost_router)
+app.include_router(prompt_template_router)
+app.include_router(system_config_router)
 
 
 # ============== 启动定时任务调度器 ==============

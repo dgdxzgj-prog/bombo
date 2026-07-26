@@ -59,6 +59,8 @@ class User:
             "view_ai_analysis": [UserRole.VIP, UserRole.ADMIN],
             "manage_channels": [UserRole.VIP, UserRole.ADMIN],
             "manage_users": [UserRole.ADMIN],
+            "manage_prompt_templates": [UserRole.ADMIN],
+            "manage_system_config": [UserRole.ADMIN],
         }
 
         allowed_roles = permission_map.get(permission, [])
