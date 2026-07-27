@@ -245,7 +245,7 @@ export default function MobileAnalysisPage() {
             <Eye className="w-8 h-8 text-gray-400" />
           </div>
           <p className="text-gray-500 text-sm mb-2">暂无自定义赛道</p>
-          <p className="text-gray-400 text-xs mb-4 text-center px-4">点击上方"编辑"按钮创建自定义赛道</p>
+          <p className="text-gray-400 text-xs mb-4 text-center px-4">点击上方&quot;编辑&quot;按钮创建自定义赛道</p>
           <button
             onClick={() => openEditModal()}
             className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium flex items-center gap-1"
