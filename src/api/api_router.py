@@ -464,6 +464,23 @@ async def use_trial(
     }
 
 
+@video_router.get("/search")
+async def search_videos(
+    q: str = Query(..., min_length=1, description="搜索关键词"),
+    limit: int = Query(20, le=50),
+):
+    """搜索上榜视频"""
+    service = MonitorPoolService()
+
+    # 搜索视频（标题、作者、频道匹配）
+    videos = service.search_featured_videos(query=q, limit=limit)
+
+    return {
+        "videos": [v.to_dict() for v in videos],
+        "query": q,
+    }
+
+
 @video_router.get("/{bvid}")
 async def get_video(bvid: str, authorization: str = Header(None)):
     """获取视频详情（公开接口，无需认证）"""

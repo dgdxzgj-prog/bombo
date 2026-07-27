@@ -95,13 +95,12 @@ export default function MobileVideoPage() {
     const diff = touchEndX.current - touchStartX.current;
     // 右滑超过100px且在左侧边缘触发
     if (diff > 100 && touchStartX.current < 50) {
-      sessionStorage.setItem("hasSwipedBack", "true");
-      router.back();
+      window.history.back();
     }
   };
 
   const handleBack = () => {
-    router.back();
+    window.history.back();
   };
 
   const fetchVideoDetail = async () => {
@@ -269,6 +268,29 @@ export default function MobileVideoPage() {
               </div>
             )}
 
+            {video.ai_analysis && video.ai_analysis.cover_analysis && (
+              <div className="bg-white rounded-xl p-3 shadow-sm">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">封面分析</h3>
+                <div className="space-y-1.5 text-xs text-gray-600">
+                  {video.ai_analysis.cover_analysis.elements?.subjects && (
+                    <p><span className="text-gray-400">主体元素：</span>{video.ai_analysis.cover_analysis.elements.subjects}</p>
+                  )}
+                  {video.ai_analysis.cover_analysis.elements?.color_palette && (
+                    <p><span className="text-gray-400">配色方案：</span>{video.ai_analysis.cover_analysis.elements.color_palette}</p>
+                  )}
+                  {video.ai_analysis.cover_analysis.style?.overall && (
+                    <p><span className="text-gray-400">视觉风格：</span>{video.ai_analysis.cover_analysis.style.overall}</p>
+                  )}
+                  {video.ai_analysis.cover_analysis.style?.mood && (
+                    <p><span className="text-gray-400">情绪氛围：</span>{video.ai_analysis.cover_analysis.style.mood}</p>
+                  )}
+                  {video.ai_analysis.cover_analysis.appeal?.hook && (
+                    <p><span className="text-gray-400">观众期待：</span>{video.ai_analysis.cover_analysis.appeal.hook}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {video.ai_analysis.content_analysis.optimizationSuggestions && (
               <div className="bg-white rounded-xl p-3 shadow-sm">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">优化建议</h3>
@@ -283,29 +305,6 @@ export default function MobileVideoPage() {
                 <p className="text-gray-500 text-xs">暂无选题分析内容</p>
               </div>
             )}
-          </div>
-        )}
-
-        {video.ai_analysis && video.ai_analysis.cover_analysis && (
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">封面分析</h3>
-            <div className="space-y-1.5 text-xs text-gray-600">
-              {video.ai_analysis.cover_analysis.elements?.subjects && (
-                <p><span className="text-gray-400">主体元素：</span>{video.ai_analysis.cover_analysis.elements.subjects}</p>
-              )}
-              {video.ai_analysis.cover_analysis.elements?.color_palette && (
-                <p><span className="text-gray-400">配色方案：</span>{video.ai_analysis.cover_analysis.elements.color_palette}</p>
-              )}
-              {video.ai_analysis.cover_analysis.style?.overall && (
-                <p><span className="text-gray-400">视觉风格：</span>{video.ai_analysis.cover_analysis.style.overall}</p>
-              )}
-              {video.ai_analysis.cover_analysis.style?.mood && (
-                <p><span className="text-gray-400">情绪氛围：</span>{video.ai_analysis.cover_analysis.style.mood}</p>
-              )}
-              {video.ai_analysis.cover_analysis.appeal?.hook && (
-                <p><span className="text-gray-400">观众期待：</span>{video.ai_analysis.cover_analysis.appeal.hook}</p>
-              )}
-            </div>
           </div>
         )}
 

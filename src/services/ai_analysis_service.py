@@ -311,6 +311,8 @@ class GeminiService:
     """Gemini 模型服务"""
 
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5  # 秒
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
         self.api_key = api_key or settings.GEMINI_API_KEY
@@ -336,52 +338,131 @@ class GeminiService:
             }
         }
 
-        try:
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=60,
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            print(f"Gemini API call failed: {e}")
-            return None
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                response = requests.post(
+                    url,
+                    json=payload,
+                    timeout=60,
+                )
+                if response.status_code == 429:
+                    if attempt < self.MAX_RETRIES - 1:
+                        import time
+                        delay = self.RETRY_DELAY * (2 ** attempt)  # 指数退避
+                        print(f"Gemini API rate limited, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        print("Gemini API rate limited: 429 Too Many Requests")
+                        return None
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as e:
+                if attempt < self.MAX_RETRIES - 1:
+                    import time
+                    delay = self.RETRY_DELAY * (2 ** attempt)
+                    print(f"Gemini API call failed: {e}, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                    time.sleep(delay)
+                    continue
+                print(f"Gemini API call failed: {e}")
+                return None
+        return None
 
     def _call_multimodal_api(self, text_prompt: str, image_url: str) -> Optional[Dict[str, Any]]:
-        """调用 Gemini 多模态 API (支持图片 URL)"""
+        """调用 Gemini 多模态 API (下载图片并使用 base64 编码)"""
         if not self.api_key:
             print("GEMINI_API_KEY not configured")
             return None
 
         url = f"{self.BASE_URL}/{self.model}:generateContent?key={self.api_key}"
 
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": text_prompt},
-                    {"image_url": {"url": image_url}}
-                ]
-            }],
-            "generationConfig": {
-                "temperature": 0.7,
-                "topK": 40,
-                "topP": 0.95,
-                "maxOutputTokens": 8192,
-            }
-        }
-
+        # 下载图片并转为 base64
         try:
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=60,
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            print(f"Gemini Multimodal API call failed: {e}")
+            import base64
+            import time
+
+            # 下载图片
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://www.bilibili.com/",
+            }
+            img_response = requests.get(image_url, headers=headers, timeout=30)
+
+            # 检查响应状态和内容类型
+            if img_response.status_code != 200:
+                print(f"Failed to download image: {image_url}, status: {img_response.status_code}")
+                return None
+
+            content_type = img_response.headers.get("Content-Type", "")
+            if "text/html" in content_type.lower():
+                print(f"Image URL returned HTML instead of image: {image_url}")
+                return None
+
+            image_data = img_response.content
+
+            # 检查图片数据有效性
+            if len(image_data) < 1000:
+                print(f"Image data too small ({len(image_data)} bytes), likely invalid: {image_url}")
+                return None
+
+            if "png" in content_type:
+                mime_type = "image/png"
+            elif "webp" in content_type:
+                mime_type = "image/webp"
+            else:
+                mime_type = "image/jpeg"
+
+            # base64 编码
+            base64_image = base64.b64encode(image_data).decode("utf-8")
+
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": text_prompt},
+                        {"inlineData": {"mimeType": mime_type, "data": base64_image}}
+                    ]
+                }],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "topK": 40,
+                    "topP": 0.95,
+                    "maxOutputTokens": 8192,
+                }
+            }
+
+            for attempt in range(self.MAX_RETRIES):
+                try:
+                    response = requests.post(
+                        url,
+                        json=payload,
+                        timeout=60,
+                    )
+                    if response.status_code == 429:
+                        if attempt < self.MAX_RETRIES - 1:
+                            delay = self.RETRY_DELAY * (2 ** attempt)
+                            print(f"Gemini Multimodal API rate limited, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            print("Gemini Multimodal API rate limited: 429 Too Many Requests")
+                            return None
+                    if response.status_code == 400:
+                        print(f"Gemini Multimodal API 400 Bad Request: {response.text[:500]}")
+                        return None
+                    response.raise_for_status()
+                    return response.json()
+                except requests.RequestException as e:
+                    if attempt < self.MAX_RETRIES - 1:
+                        delay = self.RETRY_DELAY * (2 ** attempt)
+                        print(f"Gemini Multimodal API call failed: {e}, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                        time.sleep(delay)
+                        continue
+                    print(f"Gemini Multimodal API call failed: {e}")
+                    return None
+        except Exception as e:
+            print(f"Gemini Multimodal API prepare failed: {e}")
             return None
+        return None
 
     def analyze_cover(self, video: Video, cover_url: str) -> Optional[VideoAnalysisResult]:
         """分析视频封面"""

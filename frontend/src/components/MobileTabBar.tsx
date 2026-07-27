@@ -33,11 +33,11 @@ export function MobileTabBar() {
               href={tab.href}
               className={clsx(
                 "flex flex-col items-center justify-center w-full h-full transition-colors",
-                active ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
+                active ? "text-violet-600" : "text-gray-400 hover:text-gray-600"
               )}
             >
-              <tab.icon className={clsx("w-5 h-5", active && "text-blue-600")} />
-              <span className={clsx("text-xs mt-0.5", active && "font-medium")}>
+              <tab.icon className={clsx("w-5 h-5", active && "text-violet-600")} />
+              <span className={clsx("text-xs mt-0.5", active && "font-medium text-violet-600")}>
                 {tab.name}
               </span>
             </Link>

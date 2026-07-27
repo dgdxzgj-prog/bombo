@@ -3,7 +3,7 @@
 """
 import json
 from datetime import datetime
-from typing import List, Optional, Generator, Dict
+from typing import List, Optional, Generator, Dict, Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -356,6 +356,68 @@ class MonitorPoolService:
             ).fetchall()
 
             return [self._row_to_video_with_channel_from_vc(row) for row in results]
+
+    def search_featured_videos(self, query: str, limit: int = 20) -> List[Video]:
+        """搜索上榜视频（标题、作者、频道匹配）"""
+        with get_db_session() as session:
+            results = session.execute(
+                text("""
+                    SELECT DISTINCT ON (mp.bvid) mp.id, mp.bvid, mp.title, mp.author, mp.channel, mp.keyword,
+                           mp.view_yesterday, mp.view_today, mp.growth_rate,
+                           mp.like_count, mp.favorite_count, mp.reply_count,
+                           mp.coin_count, mp.share_count, mp.danmu_count,
+                           mp.online_count, mp.max_online_today,
+                           mp.pubdate, mp.cover_url, mp.duration, mp.tags,
+                           mp.first_seen, mp.last_collected, mp.created_at, mp.updated_at,
+                           vc.status as channel_status
+                    FROM monitor_pool mp
+                    JOIN video_channel vc ON mp.bvid = vc.video_bvid
+                    JOIN channel_config cc ON vc.channel_id = cc.channel_id
+                       AND cc.status = 'active' AND cc.created_by = 1
+                    WHERE vc.status = 'featured'
+                      AND (
+                          mp.title ILIKE :query
+                          OR mp.author ILIKE :query
+                          OR mp.channel ILIKE :query
+                      )
+                    ORDER BY mp.bvid, mp.online_count DESC
+                    LIMIT :limit
+                """),
+                {"query": f"%{query}%", "limit": limit}
+            ).fetchall()
+
+            return [self._row_to_video_with_channel_from_vc(row) for row in results]
+
+    def search_featured_authors(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """搜索上榜博主（从视频结果中提取并去重）"""
+        with get_db_session() as session:
+            results = session.execute(
+                text("""
+                    SELECT DISTINCT mp.author, mp.author_mid,
+                           MAX(mp.author_fans) as fans,
+                           COUNT(*) as video_count
+                    FROM monitor_pool mp
+                    JOIN video_channel vc ON mp.bvid = vc.video_bvid
+                    JOIN channel_config cc ON vc.channel_id = cc.channel_id
+                       AND cc.status = 'active' AND cc.created_by = 1
+                    WHERE vc.status = 'featured'
+                      AND mp.author ILIKE :query
+                    GROUP BY mp.author, mp.author_mid
+                    ORDER BY fans DESC
+                    LIMIT :limit
+                """),
+                {"query": f"%{query}%", "limit": limit}
+            ).fetchall()
+
+            return [
+                {
+                    "name": row[0],
+                    "mid": row[1],
+                    "fans": row[2] or 0,
+                    "video_count": row[3],
+                }
+                for row in results
+            ]
 
     def get_featured_videos_from_channel(
         self,

@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     try {
       await login(username, password);
-      router.push("/dashboard");
+      router.push("/m");
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : "登录失败，请检查用户名和密码";
