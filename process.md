@@ -1,109 +1,83 @@
 # BOMBO 项目进度记录
 
-## 更新日期: 2026-07-24
+## 更新日期: 2026-07-27
 
 ---
 
-## 1. AI 分析功能扩展
+## 1. 本地开发环境
 
 ### 完成内容
-- **扩展 AI 内容分析的输入端**：将可用的视频数据字段全部传入 AI 分析提示词
-
-### 新增输入字段
-| 字段 | 说明 |
-|------|------|
-| duration | 视频时长（格式化显示，如"5分钟30秒"） |
-| tags | 视频标签（最多10个） |
-| view_today | 当日播放量 |
-| growth_rate | 24小时增速百分比 |
-| like_count | 点赞数 |
-| favorite_count | 收藏数 |
-| reply_count | 评论数 |
-| coin_count | 投币数 |
-| share_count | 分享数 |
-| author_fans | 粉丝数 |
+- ✅ 端口 8000 (FastAPI 后端) 和 3000 (Next.js 前端) 已启动并验证
+- ✅ Dashboard 页面"赛道数量"改为"AI分析视频数量"
+- ✅ 前端 npm build 完成，构建成功无错误
+- ✅ 删除包含敏感 API Key 的测试文件 (test_ai.bat, test_ai_task.py)
+- ✅ 添加 numpy 依赖到 requirements.txt (修复 track_adaptive_threshold_service.py 报错)
 
 ### 修改文件
-- `src/skills/ai_analysis_skills.py` - 更新 CONTENT_ANALYSIS_SKILL 模板
-- `src/services/ai_analysis_service.py` - 更新 `_build_content_prompt` 方法
+- `src/api/api_router.py` - 添加 get_db_session 和 text 导入，ai_analyzed 字段
+- `frontend/src/types/index.ts` - DashboardStats 添加 ai_analyzed 字段
+- `frontend/src/app/(dashboard)/dashboard/page.tsx` - UI 改为"AI分析视频"
+- `requirements.txt` - 添加 numpy==1.26.3
 
 ---
 
-## 2. 移动端 UI 优化
+## 2. 数据库迁移
 
 ### 完成内容
+- ✅ 导出用户表：`D:\work\bombo\bombo\user_backup.sql` (4.2 KB)
+- ⚠️ 导出完整数据库遇到 track_online_history 表权限问题，已排除
 
-#### 2.1 视频详情页右滑返回
-- 支持从屏幕左侧边缘右滑超过 100px 返回榜单
-- 首次进入显示滑动提示 toast（3秒后消失）
-- 通过 sessionStorage 记录是否已显示过提示
+### 服务器数据库状态
+```
+NAME             STATUS
+bombo-backend    Running (Restarting 循环，可能 numpy 缺失)
+bombo-frontend   Up 2 minutes
+bombo-nginx      Up 2 minutes (端口 80/443)
+bombo-postgres   Up 2 minutes (healthy, 端口 5432)
+bombo-redis      Up 2 minutes (healthy, 端口 6379)
+```
 
-#### 2.2 榜单页面位置保持
-- 滚动时自动保存滚动位置到 sessionStorage
-- 同时保存当前筛选的频道状态
-- 返回榜单时自动恢复到之前的滚动位置和频道筛选
-
-#### 2.3 榜单页视频卡片改造
-- 将"AI分析"按钮改为显示粉丝量和发布时间
-- 格式：
-  - 粉丝量：`XX万粉丝` 或具体数字
-  - 发布时间：`X月X日`
-- 保留跳转B站按钮
-
-#### 2.4 视频封面添加时长显示
-- 在封面右下角显示视频时长
-- 样式：半透明黑色背景白色文字
-- 格式：`MM:SS`（超过1小时显示 `HH:MM:SS`）
-
-### 修改文件
-- `frontend/src/app/m/page.tsx` - 榜单页面改造
-- `frontend/src/app/m/video/[bvid]/page.tsx` - 视频详情页右滑返回
-- `frontend/src/app/globals.css` - 添加 fade-in-out 动画
+### 待迁移
+- [x] 用户表已导出
+- [ ] 完整数据库迁移（需先解决 track_online_history 权限问题）
 
 ---
 
-## 3. 数据库迁移
+## 3. 服务器部署问题
 
-### 完成内容
-- 为 `monitor_pool` 表添加 `duration` 和 `tags` 字段
-- 为 `video_history` 表添加 `duration` 和 `tags` 字段
+### 问题：登录 Network Error
 
-### SQL 脚本
-- `scripts/migration_duration_tags.sql`
+**根本原因：**
+Frontend Dockerfile 中 `NEXT_PUBLIC_API_URL=http://localhost:8000` 硬编码，导致生产环境前端请求 localhost:8000 而非实际后端地址。
 
-### 字段说明
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| duration | INTEGER | 视频时长（秒） |
-| tags | JSONB | 视频标签列表 |
+**涉及文件：**
+- `/opt/bombo/frontend/Dockerfile`: `ENV NEXT_PUBLIC_API_URL=http://localhost:8000`
+- `/opt/bombo/frontend/src/lib/api.ts`: `const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";`
 
----
+**验证结果：**
+- ✅ nginx → backend: `curl http://backend:8000/health` 正常
+- ✅ 后端直连: `curl http://localhost:8000/health` 正常
+- ❌ 外部访问: `curl https://meng-yuan.uk/api/health` 返回 404
 
-## 4. 服务层修复
+**解决方案：**
+修改 docker-compose.yml 中的 frontend 配置，添加构建参数：
+```yaml
+frontend:
+  build:
+    context: ./frontend
+    args:
+      - NEXT_PUBLIC_API_URL=https://meng-yuan.uk
+```
 
-### 完成内容
-- 修复 `monitor_pool_service.py` 中 `_row_to_video_with_channel_from_vc` 方法的列索引映射
-- SQL 查询添加 `duration` 和 `tags` 列
-- 修正列索引对应关系
-
-### 修改文件
-- `src/services/monitor_pool_service.py`
-
----
-
-## 5. 模型修复
-
-### 完成内容
-- 修复 `Video` 模型缺少 `List` 导入问题
-
-### 修改文件
-- `src/models/video.py`
+然后重建：
+```bash
+docker compose build frontend
+docker compose up -d frontend
+```
 
 ---
 
-## 6. 定时任务
-
-### 任务状态
+## 4. 定时任务状态
 
 | 任务ID | 名称 | 执行频率 | 状态 |
 |--------|------|----------|------|
@@ -121,25 +95,24 @@
 | subscription_renewal_reminder | Subscription Renewal Reminder | 每天8点 | 运行中 |
 | auto_renew | Auto Renew | 每天1点 | 运行中 |
 
-### 已暂停任务
-- `Author Collection` (UP主信息采集任务) - 已注释暂停
+---
 
-### 暂停原因
-- B站 API 返回 -799 错误，账号视频状态异常
-- 需要更换 cookie 或等待账号恢复
+## 5. 待办事项
+
+1. [ ] 修复 frontend NEXT_PUBLIC_API_URL 配置
+2. [ ] 重新构建并部署 frontend
+3. [ ] 验证登录功能
+4. [ ] 检查 backend 是否因 numpy 问题需要重建
+5. [ ] 重新启用 Author Collection 任务（需更换有效 cookie）
+6. [ ] 完整迁移数据库（解决 track_online_history 权限问题）
 
 ---
 
-## 7. 历史进度记录
+## 6. 相关路径
 
-### 视频状态分离与赛道自适应爆款判定 (2026-07-24 之前)
-
-详见上方文档历史记录部分。
-
----
-
-## 待办事项
-
-1. [ ] 重新启用 Author Collection 任务（需更换有效 cookie）
-2. [ ] 执行数据库迁移后验证 duration 和 tags 字段是否正常采集
-3. [ ] 验证 AI 分析新输入是否生效
+| 类型 | 路径 |
+|------|------|
+| 本地项目 | `D:\work\bombo\bombo\` |
+| 服务器项目 | `/opt/bombo/` |
+| 用户表备份 | `D:\work\bombo\bombo\user_backup.sql` |
+| 数据库备份 | `D:\work\bombo\bombo\bombo_backup.sql` (不完整) |
