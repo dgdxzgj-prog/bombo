@@ -111,16 +111,24 @@ class SimpleScheduler:
             if task.enabled:
                 self._schedule_task(task)
 
-    def _schedule_task(self, task: ScheduledTask) -> None:
+    def _schedule_task(self, task: ScheduledTask, initial_delay: float = None) -> None:
         """调度单个任务"""
-        if task.interval_seconds:
-            # 间隔任务
-            delay = task.interval_seconds
+        # 取消已存在的定时器
+        if task.task_id in self._timers:
+            self._timers[task.task_id].cancel()
+            del self._timers[task.task_id]
+
+        if initial_delay is None:
+            if task.interval_seconds:
+                # 间隔任务
+                delay = task.interval_seconds
+            else:
+                # 定时任务 - 计算到下一个执行时间的时间
+                delay = self._calculate_cron_delay(task)
+                if delay <= 0:
+                    delay = 86400  # 如果已过执行时间，等待一天
         else:
-            # 定时任务 - 计算到下一个执行时间的时间
-            delay = self._calculate_cron_delay(task)
-            if delay <= 0:
-                delay = 86400  # 如果已过执行时间，等待一天
+            delay = initial_delay
 
         timer = Timer(delay, self._execute_task, args=[task.task_id])
         timer.daemon = True

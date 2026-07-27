@@ -1,6 +1,7 @@
 """
 视频相关定时任务
 """
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -311,6 +312,7 @@ def ai_analyze_featured_task() -> dict:
     如果视频没有封面则跳过封面分析
 
     注意：此任务应在hourly_video_update完成后执行
+    每次最多分析50个视频，避免API rate limit问题
     """
     # 检查是否启用 AI 分析
     if not settings.ENABLE_AI_ANALYSIS:
@@ -322,10 +324,11 @@ def ai_analyze_featured_task() -> dict:
     monitor_service = MonitorPoolService()
     ai_service = get_ai_analysis_service()
 
-    # 从video_channel表获取所有featured状态的视频
-    featured_videos = monitor_service.get_featured_videos_from_channel(limit=1000)
+    # 从video_channel表获取featured状态的视频，每次只分析1个
+    # 任务每小时执行一次，每次只分析1个视频避免API过载
+    featured_videos = monitor_service.get_featured_videos_from_channel(limit=1)
 
-    print(f"[{datetime.now().isoformat()}] Found {len(featured_videos)} featured videos")
+    print(f"[{datetime.now().isoformat()}] Found {len(featured_videos)} featured videos to analyze")
 
     # 先尝试从缓存获取已分析的视频
     analyzed_count = 0
@@ -363,6 +366,10 @@ def ai_analyze_featured_task() -> dict:
                 print(f"  Analyzed: {video.bvid} - {safe_str(video.title, 30)}")
             else:
                 error_count += 1
+                print(f"  Failed: {video.bvid} - {safe_str(video.title, 30)}")
+
+            # 每次分析完成后等待10秒，避免API过载
+            time.sleep(10)
 
         except Exception as e:
             error_count += 1
@@ -920,7 +927,7 @@ def init_video_tasks() -> None:
 
     # 每小时统一调度任务（P0核心任务）
     # 包含：快照采集 + 成熟视频判定 + 状态更新
-    # 执行时间：每小时执行一次
+    # 执行时间：每小时执行一次，延迟5分钟启动
     scheduler.add_interval_task(
         task_id="hourly_video_update",
         name="Hourly Video Update",
@@ -930,6 +937,7 @@ def init_video_tasks() -> None:
 
     # AI分析爆款视频任务 - 每小时执行一次
     # 在hourly_video_update完成后执行，确保分析的是最新状态
+    # 延迟10分钟启动，确保在hourly_video_update之后
     scheduler.add_interval_task(
         task_id="ai_analyze_featured",
         name="AI Analyze Featured Videos",
@@ -978,3 +986,10 @@ def init_video_tasks() -> None:
         hour=6,
         minute=30,
     )
+
+    # 重新调度三个任务，实现分时执行
+    # daily_hot: 立即执行
+    # hourly_video_update: 延迟5分钟执行
+    # ai_analyze_featured: 延迟10分钟执行
+    scheduler._schedule_task(scheduler.tasks["hourly_video_update"], initial_delay=300)
+    scheduler._schedule_task(scheduler.tasks["ai_analyze_featured"], initial_delay=600)

@@ -120,6 +120,7 @@ def get_current_user(authorization: str = Header(None)) -> Optional[User]:
         id=session.user_id,
         username=session.username,
         role=session.role,
+        user_level=session.user_level,
     )
 
 
@@ -657,6 +658,237 @@ async def list_active_channels():
             "total": len(channels),
             "channels": channels,
         }
+
+
+@channel_router.get("/user-channels")
+async def list_user_channels(authorization: str = Header(None)):
+    """获取用户自选赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        results = session.execute(
+            text("""
+                SELECT id, user_id, channel_id, channel_name, created_at
+                FROM channel_config
+                WHERE user_id = :user_id
+                ORDER BY created_at DESC
+            """),
+            {"user_id": user.id}
+        ).fetchall()
+
+        channels = [
+            {
+                "id": r[0],
+                "user_id": r[1],
+                "channel_id": r[2],
+                "channel_name": r[3],
+                "created_at": r[4].isoformat() if r[4] else None,
+            }
+            for r in results
+        ]
+
+        return {"channels": channels}
+
+
+@channel_router.post("/user-channels")
+async def add_user_channel(
+    request: dict,
+    authorization: str = Header(None)
+):
+    """添加用户自选赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    channel_id = request.get("channel_id")
+    channel_name = request.get("channel_name")
+    if not channel_id or not channel_name:
+        raise HTTPException(status_code=400, detail="channel_id and channel_name required")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        # Check if already exists
+        existing = session.execute(
+            text("""
+                SELECT id FROM channel_config
+                WHERE user_id = :user_id AND channel_id = :channel_id
+            """),
+            {"user_id": user.id, "channel_id": channel_id}
+        ).fetchone()
+
+        if existing:
+            return {"success": True, "message": "Already exists"}
+
+        # Get the next sort_order
+        max_order = session.execute(
+            text("SELECT COALESCE(MAX(sort_order), 0) FROM channel_config WHERE user_id = :user_id"),
+            {"user_id": user.id}
+        ).fetchone()[0]
+
+        session.execute(
+            text("""
+                INSERT INTO channel_config (user_id, channel_id, channel_name, sort_order, created_at, created_by)
+                VALUES (:user_id, :channel_id, :channel_name, :sort_order, NOW(), :created_by)
+            """),
+            {"user_id": user.id, "channel_id": channel_id, "channel_name": channel_name, "sort_order": max_order + 10, "created_by": user.id}
+        )
+
+        return {"success": True}
+
+
+@channel_router.delete("/user-channels/{channel_id}")
+async def delete_user_channel(
+    channel_id: int,
+    authorization: str = Header(None)
+):
+    """删除用户自选赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        session.execute(
+            text("""
+                DELETE FROM channel_config
+                WHERE id = :id AND user_id = :user_id
+            """),
+            {"id": channel_id, "user_id": user.id}
+        )
+
+        return {"success": True}
+
+
+# 自定义赛道 API
+@channel_router.get("/custom-channels")
+async def list_custom_channels(authorization: str = Header(None)):
+    """获取用户自定义赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        results = session.execute(
+            text("""
+                SELECT id, user_id, channel_name, keywords, created_at
+                FROM user_custom_channel
+                WHERE user_id = :user_id
+                ORDER BY created_at DESC
+            """),
+            {"user_id": user.id}
+        ).fetchall()
+
+        channels = [
+            {
+                "id": r[0],
+                "user_id": r[1],
+                "channel_name": r[2],
+                "keywords": r[3],
+                "created_at": r[4].isoformat() if r[4] else None,
+            }
+            for r in results
+        ]
+
+        return {"channels": channels}
+
+
+@channel_router.post("/custom-channels")
+async def add_custom_channel(
+    request: dict,
+    authorization: str = Header(None)
+):
+    """创建自定义赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    channel_name = request.get("channel_name")
+    keywords = request.get("keywords")
+    if not channel_name or not keywords:
+        raise HTTPException(status_code=400, detail="channel_name and keywords required")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        session.execute(
+            text("""
+                INSERT INTO user_custom_channel (user_id, channel_name, keywords, created_at)
+                VALUES (:user_id, :channel_name, :keywords, NOW())
+            """),
+            {"user_id": user.id, "channel_name": channel_name, "keywords": keywords}
+        )
+
+        return {"success": True}
+
+
+@channel_router.put("/custom-channels/{channel_id}")
+async def update_custom_channel(
+    channel_id: int,
+    request: dict,
+    authorization: str = Header(None)
+):
+    """更新自定义赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    channel_name = request.get("channel_name")
+    keywords = request.get("keywords")
+    if not channel_name or not keywords:
+        raise HTTPException(status_code=400, detail="channel_name and keywords required")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        session.execute(
+            text("""
+                UPDATE user_custom_channel
+                SET channel_name = :channel_name, keywords = :keywords
+                WHERE id = :id AND user_id = :user_id
+            """),
+            {"id": channel_id, "user_id": user.id, "channel_name": channel_name, "keywords": keywords}
+        )
+
+        return {"success": True}
+
+
+@channel_router.delete("/custom-channels/{channel_id}")
+async def delete_custom_channel(
+    channel_id: int,
+    authorization: str = Header(None)
+):
+    """删除自定义赛道"""
+    user = get_current_user(authorization)
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.utils.database import get_db_session
+    from sqlalchemy import text
+
+    with get_db_session() as session:
+        session.execute(
+            text("""
+                DELETE FROM user_custom_channel
+                WHERE id = :id AND user_id = :user_id
+            """),
+            {"id": channel_id, "user_id": user.id}
+        )
+
+        return {"success": True}
 
 
 @channel_router.get("/{channel_id}")

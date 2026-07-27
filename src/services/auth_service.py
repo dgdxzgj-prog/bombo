@@ -9,7 +9,7 @@ import hmac
 import secrets
 import json
 
-from src.models.user import User, UserRole, UserSession
+from src.models.user import User, UserRole, UserLevel, UserSession
 from src.config import settings
 from src.utils.database import get_db_session
 from sqlalchemy import text
@@ -53,6 +53,7 @@ class AuthService:
             user_id=user.id,
             username=user.username,
             role=user.role,
+            user_level=user.user_level,
             token="",  # 稍后生成
             expires_at=expires_at,
         )
@@ -139,7 +140,7 @@ class AuthService:
             with get_db_session() as session:
                 result = session.execute(
                     text("""
-                        SELECT id, username, password_hash, salt, email, role, is_active
+                        SELECT id, username, password_hash, salt, email, role, is_active, user_level
                         FROM users WHERE username = :username
                     """),
                     {"username": username}
@@ -148,7 +149,7 @@ class AuthService:
                 if not result:
                     return None
 
-                user_id, username, pwd_hash, salt, email, role, is_active = result
+                user_id, username, pwd_hash, salt, email, role, is_active, user_level = result
 
                 if not is_active:
                     return None
@@ -162,6 +163,7 @@ class AuthService:
                     email=email,
                     role=UserRole(role) if isinstance(role, str) else role,
                     is_active=is_active,
+                    user_level=UserLevel(user_level) if user_level else UserLevel.FREE,
                 )
         except Exception as e:
             print(f"Failed to authenticate: {e}")

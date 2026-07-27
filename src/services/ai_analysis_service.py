@@ -3,6 +3,7 @@ AI豆包模型分析服务
 使用豆包模型进行视频内容与封面分析
 """
 import json
+import random
 import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
@@ -311,8 +312,8 @@ class GeminiService:
     """Gemini 模型服务"""
 
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-    MAX_RETRIES = 3
-    RETRY_DELAY = 5  # 秒
+    MAX_RETRIES = 2
+    RETRY_DELAY = 3  # 秒，减少重试次数和等待时间
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
         self.api_key = api_key or settings.GEMINI_API_KEY
@@ -338,34 +339,54 @@ class GeminiService:
             }
         }
 
-        for attempt in range(self.MAX_RETRIES):
+        # 429重试逻辑：指数退避 + 随机抖动 + Retry-After
+        max_retries = 5
+        retry_count = 0
+        base_delay = 2
+
+        while retry_count < max_retries:
             try:
                 response = requests.post(
                     url,
                     json=payload,
                     timeout=60,
                 )
+
+                # 只对 429 做重试，400/403/404 等错误不重试
                 if response.status_code == 429:
-                    if attempt < self.MAX_RETRIES - 1:
-                        import time
-                        delay = self.RETRY_DELAY * (2 ** attempt)  # 指数退避
-                        print(f"Gemini API rate limited, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
-                        time.sleep(delay)
-                        continue
-                    else:
-                        print("Gemini API rate limited: 429 Too Many Requests")
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print(f"Gemini API 429: 达到最大重试次数 {max_retries}，放弃")
                         return None
-                response.raise_for_status()
-                return response.json()
-            except requests.RequestException as e:
-                if attempt < self.MAX_RETRIES - 1:
-                    import time
-                    delay = self.RETRY_DELAY * (2 ** attempt)
-                    print(f"Gemini API call failed: {e}, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
+
+                    # 优先读取 Retry-After 响应头
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        delay = min(int(retry_after), 30)
+                    else:
+                        delay = min(base_delay * (2 ** (retry_count - 1)) + random.random(), 30)
+
+                    print(f"Gemini API 429限流，第{retry_count}次重试，等待{delay:.2f}s")
                     time.sleep(delay)
                     continue
-                print(f"Gemini API call failed: {e}")
-                return None
+
+                # 400 等错误不重试，直接返回
+                if response.status_code >= 400:
+                    print(f"Gemini API 错误 {response.status_code}: {response.text[:200]}")
+                    return None
+
+                response.raise_for_status()
+                return response.json()
+
+            except requests.RequestException as e:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    print(f"Gemini API 请求失败: {e}")
+                    return None
+                delay = min(base_delay * (2 ** (retry_count - 1)) + random.random(), 30)
+                print(f"Gemini API 请求失败，第{retry_count}次重试，等待{delay:.2f}s: {e}")
+                time.sleep(delay)
+                continue
         return None
 
     def _call_multimodal_api(self, text_prompt: str, image_url: str) -> Optional[Dict[str, Any]]:
@@ -430,35 +451,55 @@ class GeminiService:
                 }
             }
 
-            for attempt in range(self.MAX_RETRIES):
+            # 429重试逻辑：指数退避 + 随机抖动 + Retry-After
+            max_retries = 5
+            retry_count = 0
+            base_delay = 2
+
+            while retry_count < max_retries:
                 try:
                     response = requests.post(
                         url,
                         json=payload,
                         timeout=60,
                     )
+
+                    # 只对 429 做重试，400/403/404 等错误不重试
                     if response.status_code == 429:
-                        if attempt < self.MAX_RETRIES - 1:
-                            delay = self.RETRY_DELAY * (2 ** attempt)
-                            print(f"Gemini Multimodal API rate limited, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
-                            time.sleep(delay)
-                            continue
-                        else:
-                            print("Gemini Multimodal API rate limited: 429 Too Many Requests")
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            print(f"Gemini Multimodal API 429: 达到最大重试次数 {max_retries}，放弃")
                             return None
-                    if response.status_code == 400:
-                        print(f"Gemini Multimodal API 400 Bad Request: {response.text[:500]}")
-                        return None
-                    response.raise_for_status()
-                    return response.json()
-                except requests.RequestException as e:
-                    if attempt < self.MAX_RETRIES - 1:
-                        delay = self.RETRY_DELAY * (2 ** attempt)
-                        print(f"Gemini Multimodal API call failed: {e}, retrying in {delay}s... (attempt {attempt + 1}/{self.MAX_RETRIES})")
+
+                        # 优先读取 Retry-After 响应头
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after:
+                            delay = min(int(retry_after), 30)
+                        else:
+                            delay = min(base_delay * (2 ** (retry_count - 1)) + random.random(), 30)
+
+                        print(f"Gemini Multimodal API 429限流，第{retry_count}次重试，等待{delay:.2f}s")
                         time.sleep(delay)
                         continue
-                    print(f"Gemini Multimodal API call failed: {e}")
-                    return None
+
+                    # 400 等错误不重试，直接返回
+                    if response.status_code >= 400:
+                        print(f"Gemini Multimodal API 错误 {response.status_code}: {response.text[:200]}")
+                        return None
+
+                    response.raise_for_status()
+                    return response.json()
+
+                except requests.RequestException as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print(f"Gemini Multimodal API 请求失败: {e}")
+                        return None
+                    delay = min(base_delay * (2 ** (retry_count - 1)) + random.random(), 30)
+                    print(f"Gemini Multimodal API 请求失败，第{retry_count}次重试，等待{delay:.2f}s: {e}")
+                    time.sleep(delay)
+                    continue
+
         except Exception as e:
             print(f"Gemini Multimodal API prepare failed: {e}")
             return None

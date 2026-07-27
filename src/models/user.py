@@ -136,6 +136,7 @@ class UserSession:
     user_id: int
     username: str
     role: UserRole
+    user_level: UserLevel  # 用户层级
     token: str
     expires_at: datetime
 

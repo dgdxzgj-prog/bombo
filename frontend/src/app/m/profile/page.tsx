@@ -31,7 +31,12 @@ export default function MobileProfilePage() {
 
   const fetchUserStatus = async () => {
     try {
-      const res = await fetch("/api/videos/user-status");
+      const token = localStorage.getItem("bombo_token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/videos/user-status", { headers });
       if (res.ok) {
         const data = await res.json();
         setUserStatus(data);

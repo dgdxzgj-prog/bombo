@@ -1,402 +1,355 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { Search, Loader2, Lock, Zap, Users, Crown } from "lucide-react";
-import type { AIAnalysis } from "@/types";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Plus, Edit, Trash2, X, Check, Eye } from "lucide-react";
+
+interface CustomChannel {
+  id: number;
+  user_id: number;
+  channel_name: string;
+  keywords: string;
+  created_at: string;
+}
 
 interface UserStatus {
   user_level: string;
   is_login: boolean;
-  permissions: {
-    user_level: string;
-    is_paid: boolean;
-    tier: string | null;
-    status_label: string;
-    upgrade_hint?: string;
-    upgrade_tiers?: Array<{ tier: string; price: number }>;
-  };
-  quotas: {
-    day_self_analysis?: { remaining: number; total: number };
-    month_custom_bvid?: { remaining: number; total: number };
-    month_compare?: { remaining: number; total: number };
-  };
+  username?: string;
 }
 
-function AnalysisContent() {
+export default function MobileAnalysisPage() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
-  const [bvid, setBvid] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AIAnalysis | null>(null);
-  const searchParams = useSearchParams();
+  const [customChannels, setCustomChannels] = useState<CustomChannel[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newKeywords, setNewKeywords] = useState("");
+  const [editingChannel, setEditingChannel] = useState<CustomChannel | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     fetchUserStatus();
-    // Check if bvid is passed in URL
-    const urlBvid = searchParams.get("bvid");
-    if (urlBvid) {
-      setBvid(urlBvid);
-      handleAnalyze(urlBvid);
-    }
-  }, [searchParams]);
+  }, []);
 
   const fetchUserStatus = async () => {
     try {
-      const res = await fetch("/api/videos/user-status");
+      const token = localStorage.getItem("bombo_token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/videos/user-status", { headers });
       if (res.ok) {
         const data = await res.json();
-        setUserStatus(data);
+        setUserStatus({
+          is_login: data.is_login,
+          user_level: data.user_level,
+          username: data.username,
+        });
+        if (data.is_login) {
+          fetchCustomChannels();
+        }
       }
     } catch (err) {
       console.error("Failed to fetch user status:", err);
-    }
-  };
-
-  const handleAnalyze = async (targetBvid?: string) => {
-    const inputBvid = targetBvid || bvid.trim();
-    if (!inputBvid) return;
-
-    // Check permission for custom BVID analysis
-    const canCustomAnalysis =
-      userStatus?.user_level === "standard" || userStatus?.user_level === "pro";
-
-    if (!canCustomAnalysis) {
-      alert("自定义视频解析仅标准版和专业版可用，升级后解锁");
-      return;
-    }
-
-    // Check quota
-    if (userStatus?.quotas?.month_custom_bvid) {
-      if (userStatus.quotas.month_custom_bvid.remaining <= 0) {
-        alert("月度自定义分析额度已用完，请升级提升额度");
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/videos/${inputBvid}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAnalysisResult(data.ai_analysis);
-      } else {
-        alert("视频不存在或获取分析失败");
-      }
-    } catch (err) {
-      console.error("Analysis failed:", err);
-      alert("分析失败，请重试");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const canUseFeature = (feature: string) => {
-    const level = userStatus?.user_level;
-    switch (feature) {
-      case "self_analysis":
-        return ["light", "standard", "pro"].includes(level || "");
-      case "custom_bvid":
-        return ["standard", "pro"].includes(level || "");
-      case "compare":
-        return ["standard", "pro"].includes(level || "");
-      case "commercial":
-        return level === "pro";
-      default:
-        return false;
+  const fetchCustomChannels = async () => {
+    try {
+      const token = localStorage.getItem("bombo_token");
+      const res = await fetch("/api/channels/custom-channels", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCustomChannels(data.channels || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch custom channels:", err);
     }
   };
 
-  const handleUpgrade = (tier: string) => {
-    router.push(`/m/pricing?highlight=${tier}`);
+  const addCustomChannel = async () => {
+    if (!newChannelName.trim() || !newKeywords.trim()) return;
+    try {
+      const token = localStorage.getItem("bombo_token");
+      const res = await fetch("/api/channels/custom-channels", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ channel_name: newChannelName.trim(), keywords: newKeywords.trim() }),
+      });
+      if (res.ok) {
+        setNewChannelName("");
+        setNewKeywords("");
+        fetchCustomChannels();
+      }
+    } catch (err) {
+      console.error("Failed to add custom channel:", err);
+    }
   };
 
-  return (
-    <div className="px-3 py-4">
-      {/* BVID Input */}
-      <div className="mb-6">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={bvid}
-              onChange={(e) => setBvid(e.target.value)}
-              placeholder="输入B站BV号"
-              disabled={!canUseFeature("custom_bvid")}
-              className={`w-full px-4 py-3 pr-10 border rounded-xl text-sm ${
-                canUseFeature("custom_bvid")
-                  ? "border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  : "border-gray-100 bg-gray-50 text-gray-400"
-              }`}
-            />
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+  const updateCustomChannel = async () => {
+    if (!editingChannel || !newChannelName.trim() || !newKeywords.trim()) return;
+    try {
+      const token = localStorage.getItem("bombo_token");
+      const res = await fetch(`/api/channels/custom-channels/${editingChannel.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ channel_name: newChannelName.trim(), keywords: newKeywords.trim() }),
+      });
+      if (res.ok) {
+        setEditingChannel(null);
+        setNewChannelName("");
+        setNewKeywords("");
+        fetchCustomChannels();
+      }
+    } catch (err) {
+      console.error("Failed to update custom channel:", err);
+    }
+  };
+
+  const deleteCustomChannel = async (id: number) => {
+    try {
+      const token = localStorage.getItem("bombo_token");
+      const res = await fetch(`/api/channels/custom-channels/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        if (editingChannel?.id === id) {
+          setEditingChannel(null);
+          setNewChannelName("");
+          setNewKeywords("");
+        }
+        fetchCustomChannels();
+      }
+    } catch (err) {
+      console.error("Failed to delete custom channel:", err);
+    }
+  };
+
+  const openEditModal = (channel?: CustomChannel) => {
+    if (channel) {
+      setEditingChannel(channel);
+      setNewChannelName(channel.channel_name);
+      setNewKeywords(channel.keywords);
+    } else {
+      setEditingChannel(null);
+      setNewChannelName("");
+      setNewKeywords("");
+    }
+    setShowEditModal(true);
+  };
+
+  const closeModal = () => {
+    setShowEditModal(false);
+    setEditingChannel(null);
+    setNewChannelName("");
+    setNewKeywords("");
+  };
+
+  // Redirect tourists to login
+  if (!isLoading && !userStatus?.is_login) {
+    return (
+      <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Edit className="w-8 h-8 text-gray-400" />
           </div>
+          <p className="text-gray-500 mb-4">登录后解锁自选赛道功能</p>
           <button
-            onClick={() => handleAnalyze()}
-            disabled={!canUseFeature("custom_bvid") || isLoading}
-            className={`px-5 py-3 rounded-xl text-sm font-medium transition-colors ${
-              canUseFeature("custom_bvid")
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed"
-            }`}
+            onClick={() => router.push("/login")}
+            className="px-6 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium"
           >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "解析"}
+            登录 / 注册
           </button>
         </div>
-        {!canUseFeature("custom_bvid") && (
-          <p className="mt-2 text-xs text-orange-500">
-            自定义视频解析仅标准版/专业版可用
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-violet-600 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[#f4f5f7] min-h-screen pb-20">
+      {/* Top Header */}
+      <header className="bg-violet-600 text-white safe-area-top">
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold tracking-tight">BOMBO</span>
+              <span className="text-xs bg-violet-500 px-1.5 py-0.5 rounded">自选赛道</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {userStatus?.is_login ? (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-7 h-7 rounded-full bg-violet-400 flex items-center justify-center text-sm font-medium">
+                    {userStatus.username?.[0]?.toUpperCase() || "U"}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => router.push("/login")}
+                  className="w-8 h-8 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium transition-colors flex items-center justify-center"
+                >
+                  登录
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Channel Tags */}
+      <div className="px-2 py-2 bg-white border-b border-gray-100">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <button
+            onClick={() => openEditModal()}
+            className="flex-shrink-0 px-3 py-1 bg-violet-600 text-white rounded-full text-xs font-medium flex items-center gap-1"
+          >
+            <Edit className="w-3 h-3" />
+            编辑
+          </button>
+          {customChannels.map((cc) => (
             <button
-              onClick={() => handleUpgrade("standard")}
-              className="ml-1 text-blue-600 underline"
+              key={cc.id}
+              onClick={() => openEditModal(cc)}
+              className="flex-shrink-0 px-2 py-1 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full text-xs font-medium"
             >
-              立即升级
+              {cc.channel_name}
             </button>
-          </p>
-        )}
+          ))}
+        </div>
       </div>
 
-      {/* Quota Cards */}
-      {!!userStatus?.is_login && !!userStatus?.quotas && (
-        <div className="mb-6 grid grid-cols-3 gap-2">
-          <QuotaCard
-            title="今日自选"
-            remaining={userStatus.quotas.day_self_analysis?.remaining || 0}
-            total={userStatus.quotas.day_self_analysis?.total || 0}
-            icon={Zap}
-            color="blue"
-          />
-          <QuotaCard
-            title="月度自定义"
-            remaining={userStatus.quotas.month_custom_bvid?.remaining || 0}
-            total={userStatus.quotas.month_custom_bvid?.total || 0}
-            icon={Users}
-            color="emerald"
-            locked={!canUseFeature("custom_bvid")}
-          />
-          <QuotaCard
-            title="对标诊断"
-            remaining={userStatus.quotas.month_compare?.remaining || 0}
-            total={userStatus.quotas.month_compare?.total || 0}
-            icon={Crown}
-            color="purple"
-            locked={!canUseFeature("compare")}
-          />
+      {/* Empty State */}
+      {customChannels.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+            <Eye className="w-8 h-8 text-gray-400" />
+          </div>
+          <p className="text-gray-500 text-sm mb-2">暂无自定义赛道</p>
+          <p className="text-gray-400 text-xs mb-4 text-center px-4">点击上方"编辑"按钮创建自定义赛道</p>
+          <button
+            onClick={() => openEditModal()}
+            className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            创建赛道
+          </button>
         </div>
       )}
 
-      {/* Feature Cards */}
-      <div className="space-y-3 mb-6">
-        <FeatureCard
-          title="榜单自选分析"
-          description="对榜单视频进行AI分析"
-          remaining={
-            canUseFeature("self_analysis")
-              ? `${userStatus?.quotas?.day_self_analysis?.remaining || 0}/${userStatus?.quotas?.day_self_analysis?.total || 0}`
-              : undefined
-          }
-          icon={Zap}
-          color="blue"
-          locked={!canUseFeature("self_analysis")}
-          onClick={() => {
-            if (!userStatus?.is_login) {
-              router.push("/login");
-            } else if (!canUseFeature("self_analysis")) {
-              handleUpgrade("light");
-            } else {
-              router.push("/m");
-            }
-          }}
-        />
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-xl overflow-hidden max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <h3 className="font-medium text-gray-800">
+                {editingChannel ? "编辑赛道" : "创建赛道"}
+              </h3>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        <FeatureCard
-          title="自定义视频解析"
-          description="输入BVID深度分析任意视频"
-          remaining={
-            canUseFeature("custom_bvid")
-              ? `${userStatus?.quotas?.month_custom_bvid?.remaining || 0}/${userStatus?.quotas?.month_custom_bvid?.total || 0}`
-              : undefined
-          }
-          icon={Search}
-          color="emerald"
-          locked={!canUseFeature("custom_bvid")}
-          onClick={() => {
-            if (!userStatus?.is_login) {
-              router.push("/login");
-            } else if (!canUseFeature("custom_bvid")) {
-              handleUpgrade("standard");
-            }
-          }}
-        />
-
-        <FeatureCard
-          title="双视频对标诊断"
-          description="对比两个视频的差异和优化空间"
-          remaining={
-            canUseFeature("compare")
-              ? `${userStatus?.quotas?.month_compare?.remaining || 0}/${userStatus?.quotas?.month_compare?.total || 0}`
-              : undefined
-          }
-          icon={Users}
-          color="purple"
-          locked={!canUseFeature("compare")}
-          onClick={() => {
-            if (!userStatus?.is_login) {
-              router.push("/login");
-            } else if (!canUseFeature("compare")) {
-              handleUpgrade("standard");
-            }
-          }}
-        />
-
-        {canUseFeature("commercial") && (
-          <FeatureCard
-            title="账号商业化方案"
-            description="专业版专属：获取账号变现方案"
-            icon={Crown}
-            color="orange"
-            locked={false}
-            onClick={() => {}}
-          />
-        )}
-      </div>
-
-      {/* Analysis Result */}
-      {analysisResult && (
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-medium text-gray-800 mb-3">分析结果</h3>
-          {analysisResult.cover_analysis && (
-            <div className="mb-4">
-              <h4 className="text-sm text-gray-500 mb-2">封面分析</h4>
-              <div className="text-sm text-gray-700 space-y-1">
-                <p>主体元素：{analysisResult.cover_analysis.elements?.subjects}</p>
-                <p>配色方案：{analysisResult.cover_analysis.elements?.color_palette}</p>
-                <p>视觉风格：{analysisResult.cover_analysis.style?.overall}</p>
+            {/* Form */}
+            <div className="p-4 space-y-4 flex-shrink-0">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">赛道名称</label>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  placeholder="例如：数码科技"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">搜索关键词</label>
+                <textarea
+                  value={newKeywords}
+                  onChange={(e) => setNewKeywords(e.target.value)}
+                  placeholder="多个关键词用逗号分隔，例如：手机,电脑,数码"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">多个关键词用逗号分隔</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (editingChannel) {
+                      updateCustomChannel();
+                    } else {
+                      addCustomChannel();
+                    }
+                  }}
+                  disabled={!newChannelName.trim() || !newKeywords.trim()}
+                  className="flex-1 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  {editingChannel ? "保存" : "创建"}
+                </button>
               </div>
             </div>
-          )}
-          {analysisResult.content_analysis && (
-            <div>
-              <h4 className="text-sm text-gray-500 mb-2">内容分析</h4>
-              <div className="text-sm text-gray-700 space-y-1">
-                <p>话题总结：{analysisResult.content_analysis.shortTopic}</p>
-                {analysisResult.content_analysis.summaryInsight && (
-                  <p>爆款逻辑：{analysisResult.content_analysis.summaryInsight}</p>
-                )}
+
+            {/* Channel List */}
+            {customChannels.length > 0 && (
+              <div className="flex-1 overflow-y-auto border-t border-gray-100">
+                <div className="p-4">
+                  <p className="text-xs text-gray-500 mb-2">已创建 ({customChannels.length})</p>
+                  <div className="space-y-2">
+                    {customChannels.map((cc) => (
+                      <div
+                        key={cc.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          editingChannel?.id === cc.id ? "border-violet-300 bg-violet-50" : "border-gray-100 bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{cc.channel_name}</p>
+                          <p className="text-xs text-gray-400 truncate">{cc.keywords}</p>
+                        </div>
+                        <div className="flex items-center gap-1 ml-2">
+                          <button
+                            onClick={() => openEditModal(cc)}
+                            className="p-1.5 text-gray-400 hover:text-violet-600"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteCustomChannel(cc.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function MobileAnalysisPage() {
-  return (
-    <Suspense fallback={<div className="p-4 text-center">加载中...</div>}>
-      <AnalysisContent />
-    </Suspense>
-  );
-}
-
-interface QuotaCardProps {
-  title: string;
-  remaining: number;
-  total: number;
-  icon: React.ElementType;
-  color: string;
-  locked?: boolean;
-}
-
-function QuotaCard({ title, remaining, total, icon: Icon, color, locked }: QuotaCardProps) {
-  const colorClasses = {
-    blue: "bg-blue-50 text-blue-600",
-    emerald: "bg-emerald-50 text-emerald-600",
-    purple: "bg-purple-50 text-purple-600",
-    orange: "bg-orange-50 text-orange-600",
-  };
-
-  return (
-    <div className={`rounded-xl p-3 ${locked ? "bg-gray-100" : colorClasses[color as keyof typeof colorClasses]}`}>
-      <div className="flex items-center gap-1 mb-1">
-        <Icon className="w-4 h-4" />
-        <span className="text-xs font-medium">{title}</span>
-        {locked && <Lock className="w-3 h-3 ml-1" />}
-      </div>
-      {locked ? (
-        <p className="text-xs text-gray-400">不可用</p>
-      ) : (
-        <p className="text-lg font-bold">
-          {remaining}
-          <span className="text-xs font-normal text-gray-500">/{total}</span>
-        </p>
-      )}
-    </div>
-  );
-}
-
-interface FeatureCardProps {
-  title: string;
-  description: string;
-  remaining?: string;
-  icon: React.ElementType;
-  color: string;
-  locked: boolean;
-  onClick: () => void;
-}
-
-function FeatureCard({
-  title,
-  description,
-  remaining,
-  icon: Icon,
-  color,
-  locked,
-  onClick,
-}: FeatureCardProps) {
-  const colorClasses = {
-    blue: "border-blue-200 bg-blue-50",
-    emerald: "border-emerald-200 bg-emerald-50",
-    purple: "border-purple-200 bg-purple-50",
-    orange: "border-orange-200 bg-orange-50",
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full p-4 rounded-xl border text-left transition-all ${
-        locked ? "border-gray-100 bg-gray-50 opacity-60" : colorClasses[color as keyof typeof colorClasses]
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-            locked ? "bg-gray-200" : "bg-white"
-          }`}>
-            {locked ? (
-              <Lock className="w-5 h-5 text-gray-400" />
-            ) : (
-              <Icon className={`w-5 h-5 ${
-                color === "blue" ? "text-blue-600" :
-                color === "emerald" ? "text-emerald-600" :
-                color === "purple" ? "text-purple-600" :
-                "text-orange-600"
-              }`} />
             )}
           </div>
-          <div>
-            <h4 className="font-medium text-gray-800 text-sm">{title}</h4>
-            <p className="text-xs text-gray-500">{description}</p>
-          </div>
         </div>
-        {remaining && (
-          <div className="text-right">
-            <span className="text-sm font-medium text-gray-800">{remaining}</span>
-            <p className="text-xs text-gray-400">剩余</p>
-          </div>
-        )}
-      </div>
-    </button>
+      )}
+    </div>
   );
 }
