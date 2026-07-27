@@ -312,6 +312,11 @@ def ai_analyze_featured_task() -> dict:
 
     注意：此任务应在hourly_video_update完成后执行
     """
+    # 检查是否启用 AI 分析
+    if not settings.ENABLE_AI_ANALYSIS:
+        print(f"[{datetime.now().isoformat()}] AI analysis disabled, skipping task...")
+        return {"status": "skipped", "reason": "AI analysis disabled"}
+
     print(f"[{datetime.now().isoformat()}] Starting AI analysis task...")
 
     monitor_service = MonitorPoolService()

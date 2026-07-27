@@ -307,11 +307,269 @@ class DoubaoService:
             return None
 
 
+class GeminiService:
+    """Gemini 模型服务"""
+
+    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
+        self.api_key = api_key or settings.GEMINI_API_KEY
+        self.model = model
+
+    def _call_api(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """调用 Gemini API (text-only)"""
+        if not self.api_key:
+            print("GEMINI_API_KEY not configured")
+            return None
+
+        url = f"{self.BASE_URL}/{self.model}:generateContent?key={self.api_key}"
+
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 8192,
+            }
+        }
+
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Gemini API call failed: {e}")
+            return None
+
+    def _call_multimodal_api(self, text_prompt: str, image_url: str) -> Optional[Dict[str, Any]]:
+        """调用 Gemini 多模态 API (支持图片 URL)"""
+        if not self.api_key:
+            print("GEMINI_API_KEY not configured")
+            return None
+
+        url = f"{self.BASE_URL}/{self.model}:generateContent?key={self.api_key}"
+
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": text_prompt},
+                    {"image_url": {"url": image_url}}
+                ]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 8192,
+            }
+        }
+
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Gemini Multimodal API call failed: {e}")
+            return None
+
+    def analyze_cover(self, video: Video, cover_url: str) -> Optional[VideoAnalysisResult]:
+        """分析视频封面"""
+        prompt = self._build_cover_prompt(video, cover_url)
+        response = self._call_multimodal_api(prompt, cover_url)
+        if not response:
+            return None
+        return self._parse_cover_response(video.bvid, response)
+
+    def analyze_content(self, video: Video) -> Optional[VideoAnalysisResult]:
+        """分析视频内容"""
+        prompt = self._build_content_prompt(video)
+        response = self._call_api(prompt)
+        if not response:
+            return None
+        return self._parse_content_response(video.bvid, response)
+
+    def _load_template_from_db(self, template_type: str) -> Optional[str]:
+        """从数据库加载模板，支持缓存"""
+        global _template_cache
+        if template_type in _template_cache:
+            return _template_cache[template_type]
+
+        try:
+            with get_db_session() as session:
+                result = session.execute(
+                    text("""
+                        SELECT content FROM ai_prompt_template
+                        WHERE template_type = :template_type AND is_active = TRUE
+                    """),
+                    {"template_type": template_type}
+                ).fetchone()
+
+                if result and result[0]:
+                    _template_cache[template_type] = result[0]
+                    return result[0]
+        except Exception as e:
+            print(f"Failed to load template from database: {e}")
+
+        return None
+
+    def _get_template(self, template_type: str) -> str:
+        """获取模板，优先从数据库加载，失败则使用硬编码模板"""
+        template = self._load_template_from_db(template_type)
+        if template:
+            return template
+
+        if template_type == "cover":
+            return COVER_ANALYSIS_SKILL
+        elif template_type == "content":
+            return CONTENT_ANALYSIS_SKILL
+
+        raise ValueError(f"Unknown template type: {template_type}")
+
+    def _build_cover_prompt(self, video: Video, cover_url: str) -> str:
+        """构建封面分析提示词"""
+        template = self._get_template("cover")
+        return template
+
+    def _build_content_prompt(self, video: Video) -> str:
+        """构建内容分析提示词"""
+        template = self._get_template("content")
+
+        duration = video.duration or 0
+        if duration > 0:
+            h = duration // 3600
+            m = (duration % 3600) // 60
+            s = duration % 60
+            if h > 0:
+                duration_str = f"{h}小时{m}分钟{s}秒"
+            elif m > 0:
+                duration_str = f"{m}分钟{s}秒"
+            else:
+                duration_str = f"{s}秒"
+        else:
+            duration_str = "未知"
+
+        tags = video.tags
+        if tags:
+            tags_str = "、".join(tags[:10])
+            if len(tags) > 10:
+                tags_str += f" 等{len(tags)}个标签"
+        else:
+            tags_str = "无"
+
+        return template.format(
+            video_title=video.title,
+            author=video.author,
+            channel=video.channel,
+            description=getattr(video, 'description', '') or '无',
+            duration=duration_str,
+            tags=tags_str,
+            view_today=video.view_today,
+            growth_rate=video.growth_rate,
+            like_count=video.like_count,
+            favorite_count=video.favorite_count,
+            reply_count=video.reply_count,
+            coin_count=video.coin_count,
+            share_count=video.share_count,
+            author_fans=getattr(video, 'author_fans', 0) or 0,
+        )
+
+    def _parse_cover_response(self, bvid: str, response: Dict[str, Any]) -> Optional[VideoAnalysisResult]:
+        """解析封面分析响应"""
+        try:
+            text = self._extract_output_text(response)
+            return self._parse_to_video_result(bvid, "cover", text)
+        except Exception as e:
+            print(f"Failed to parse cover response: {e}")
+            return None
+
+    def _parse_content_response(self, bvid: str, response: Dict[str, Any]) -> Optional[VideoAnalysisResult]:
+        """解析内容分析响应"""
+        try:
+            text = self._extract_output_text(response)
+            return self._parse_to_video_result(bvid, "content", text)
+        except Exception as e:
+            print(f"Failed to parse content response: {e}")
+            return None
+
+    def _extract_output_text(self, response: Dict[str, Any]) -> str:
+        """从 API 响应中提取文本"""
+        try:
+            candidates = response.get("candidates", [])
+            if candidates:
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                if parts:
+                    return parts[0].get("text", "").strip()
+            return ""
+        except Exception:
+            return ""
+
+    def _parse_to_video_result(self, bvid: str, analysis_type: str, text: str) -> Optional[VideoAnalysisResult]:
+        """将响应文本解析为 VideoAnalysisResult"""
+        try:
+            json_text = text
+            if "```json" in text:
+                json_text = text.split("```json")[1].split("```")[0]
+            elif "```" in text:
+                json_text = text.split("```")[1].split("```")[0]
+
+            data = json.loads(json_text)
+
+            result = VideoAnalysisResult(
+                bvid=bvid,
+                analysis_type=analysis_type,
+                raw_response=data,
+            )
+
+            if analysis_type == "cover":
+                composition = data.get("composition", {})
+                elements = data.get("elements", {})
+                style = data.get("style", {})
+                appeal = data.get("appeal", {})
+
+                result.composition_rule = composition.get("rule")
+                result.composition_desc = composition.get("description")
+                result.elements_subjects = elements.get("subjects")
+                result.elements_text = elements.get("text")
+                result.elements_color_palette = elements.get("color_palette")
+                result.elements_lighting = elements.get("lighting")
+                result.style_overall = style.get("overall")
+                result.style_mood = style.get("mood")
+                result.appeal_attraction = appeal.get("attraction")
+                result.appeal_hook = appeal.get("hook")
+            else:
+                result.short_topic = data.get("shortTopic")
+                result.summary_insight = data.get("summaryInsight")
+                result.optimization_suggestions = data.get("optimizationSuggestions")
+
+            return result
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}, text: {text[:200]}")
+            return None
+
+
 class AIAnalysisService:
     """AI分析服务"""
 
     def __init__(self):
-        self.doubao_service = DoubaoService()
+        self.provider = settings.AI_PROVIDER.lower() if settings.AI_PROVIDER else "gemini"
+        if self.provider == "gemini":
+            self.gemini_service = GeminiService()
+            self.doubao_service = None
+        else:
+            self.doubao_service = DoubaoService()
+            self.gemini_service = None
 
     def analyze_video(
         self,
@@ -332,14 +590,24 @@ class AIAnalysisService:
         """
         result = AIAnalysisResult(bvid=video.bvid)
 
-        if analysis_type in ("cover", "both"):
-            if not cover_url:
-                cover_url = getattr(video, 'cover_url', None)
-            if cover_url:
-                result.cover_analysis = self.doubao_service.analyze_cover(video, cover_url)
+        if self.provider == "gemini" and self.gemini_service:
+            if analysis_type in ("cover", "both"):
+                if not cover_url:
+                    cover_url = getattr(video, 'cover_url', None)
+                if cover_url:
+                    result.cover_analysis = self.gemini_service.analyze_cover(video, cover_url)
 
-        if analysis_type in ("content", "both"):
-            result.content_analysis = self.doubao_service.analyze_content(video)
+            if analysis_type in ("content", "both"):
+                result.content_analysis = self.gemini_service.analyze_content(video)
+        elif self.doubao_service:
+            if analysis_type in ("cover", "both"):
+                if not cover_url:
+                    cover_url = getattr(video, 'cover_url', None)
+                if cover_url:
+                    result.cover_analysis = self.doubao_service.analyze_cover(video, cover_url)
+
+            if analysis_type in ("content", "both"):
+                result.content_analysis = self.doubao_service.analyze_content(video)
 
         return result
 

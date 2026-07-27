@@ -32,7 +32,11 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - BILI_COOKIE=${BILI_COOKIE}
       - BILI_WBI_KEY=${BILI_WBI_KEY}
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ARK_API_KEY=${ARK_API_KEY}
+      - DOUBAO_MODEL=${DOUBAO_MODEL:-doubao-seed-2-0-lite-260428}
+      - ENABLE_AI_ANALYSIS=${ENABLE_AI_ANALYSIS:-true}
     depends_on:
       - postgres
       - redis

@@ -32,8 +32,11 @@ class Settings(BaseModel):
     CRAWLER_PROXY_POOL: Optional[str] = None
 
     # AI模型配置
+    AI_PROVIDER: str = "gemini"  # "gemini" 或 "doubao"
+    GEMINI_API_KEY: str = ""
     ARK_API_KEY: str = ""
     DOUBAO_MODEL: str = "doubao-seed-2-0-lite-260428"
+    ENABLE_AI_ANALYSIS: bool = True
 
     # 日志配置
     LOG_LEVEL: str = "INFO"
@@ -53,8 +56,11 @@ def _get_settings() -> Settings:
         BILI_COOKIE=os.getenv("BILI_COOKIE"),
         BILI_WBI_KEY=os.getenv("BILI_WBI_KEY"),
         CRAWLER_PROXY_POOL=os.getenv("CRAWLER_PROXY_POOL"),
+        AI_PROVIDER=os.getenv("AI_PROVIDER", "gemini"),
+        GEMINI_API_KEY=os.getenv("GEMINI_API_KEY", ""),
         ARK_API_KEY=os.getenv("ARK_API_KEY", ""),
         DOUBAO_MODEL=os.getenv("DOUBAO_MODEL", "doubao-seed-2-0-lite-260428"),
+        ENABLE_AI_ANALYSIS=os.getenv("ENABLE_AI_ANALYSIS", "true").lower() == "true",
         LOG_LEVEL=os.getenv("LOG_LEVEL", "INFO"),
     )
 
