@@ -52,8 +52,8 @@ class TrackAdaptiveThresholdService:
                 "min_sample_count": result[6] if result[6] else 30,
                 "t_up": result[7] if result[7] else 0,
                 "t_down": result[8] if result[8] else 0,
-                "t_up_min": result[9] if result[9] else 100,
-                "t_down_min": result[10] if result[10] else 50,
+                "t_up_min": result[9] if result[9] else 20,
+                "t_down_min": result[10] if result[10] else 15,
                 "last_threshold_update": result[11],
                 "threshold_sample_count": result[12] if result[12] else 0,
             }
@@ -88,8 +88,8 @@ class TrackAdaptiveThresholdService:
                     "min_sample_count": row[6] if row[6] else 30,
                     "t_up": row[7] if row[7] else 0,
                     "t_down": row[8] if row[8] else 0,
-                    "t_up_min": row[9] if row[9] else 100,
-                    "t_down_min": row[10] if row[10] else 50,
+                    "t_up_min": row[9] if row[9] else 20,
+                    "t_down_min": row[10] if row[10] else 15,
                     "last_threshold_update": row[11],
                     "threshold_sample_count": row[12] if row[12] else 0,
                 }
@@ -145,6 +145,22 @@ class TrackAdaptiveThresholdService:
         data_array = np.array(data, dtype=np.int64)
         return int(np.percentile(data_array, percentile * 100))
 
+    def calculate_average(self, data: List[int]) -> int:
+        """
+        计算平均值
+
+        Args:
+            data: 数据列表
+
+        Returns:
+            平均值
+        """
+        if not data:
+            return 0
+
+        data_array = np.array(data, dtype=np.int64)
+        return int(np.mean(data_array))
+
     def calculate_threshold_for_track(self, channel_id: str) -> Tuple[int, int, int]:
         """
         计算单个赛道的阈值
@@ -167,21 +183,20 @@ class TrackAdaptiveThresholdService:
         sample_count = len(online_history)
 
         if sample_count >= config["min_sample_count"]:
-            # 样本充足，使用动态分位数
-            p_up = config["p_up"]
-            p_down = config["p_down"]
+            # 样本充足，使用平均值计算阈值
             hysteresis_ratio = config["hysteresis_ratio"]
 
-            t_up = self.calculate_percentile(online_history, p_up)
+            # 使用平均值作为阈值基准
+            t_up = self.calculate_average(online_history)
             t_down = int(t_up * hysteresis_ratio)
 
-            # 确保不低于保底阈值
-            t_up = max(t_up, config["t_up_min"])
-            t_down = max(t_down, config["t_down_min"])
+            # 确保不低于保底阈值（20、15）
+            t_up = max(t_up, 20)
+            t_down = max(t_down, 15)
         else:
             # 样本不足，使用保底阈值
-            t_up = config["t_up_min"]
-            t_down = config["t_down_min"]
+            t_up = 20
+            t_down = 15
 
         return (t_up, t_down, sample_count)
 

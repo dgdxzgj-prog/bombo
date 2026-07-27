@@ -920,23 +920,21 @@ def init_video_tasks() -> None:
 
     # 每小时统一调度任务（P0核心任务）
     # 包含：快照采集 + 成熟视频判定 + 状态更新
-    # 执行时间：每小时的:05
-    scheduler.add_cron_task(
+    # 执行时间：每小时执行一次
+    scheduler.add_interval_task(
         task_id="hourly_video_update",
         name="Hourly Video Update",
         func=hourly_video_update_task,
-        hour=0,
-        minute=5,
+        interval_seconds=3600,  # 1小时
     )
 
     # AI分析爆款视频任务 - 每小时执行一次
-    # 在hourly_video_update完成后执行（:15），确保分析的是最新状态
-    scheduler.add_cron_task(
+    # 在hourly_video_update完成后执行，确保分析的是最新状态
+    scheduler.add_interval_task(
         task_id="ai_analyze_featured",
         name="AI Analyze Featured Videos",
         func=ai_analyze_featured_task,
-        hour=0,
-        minute=15,
+        interval_seconds=3600,  # 1小时
     )
 
     # UP主信息异步采集任务 - 每小时执行一次

@@ -873,10 +873,10 @@ async def get_dashboard_stats(authorization: str = Header(None)):
     monitor_service = MonitorPoolService()
     channel_service = ChannelConfigService()
 
-    # 获取各状态视频数量
-    monitoring_count = len(monitor_service.get_videos_by_status(VideoStatus.MONITORING, limit=10000))
-    featured_count = len(monitor_service.get_videos_by_status(VideoStatus.FEATURED, limit=10000))
-    declined_count = len(monitor_service.get_videos_by_status(VideoStatus.DECLINED, limit=10000))
+    # 获取各状态视频数量（从video_channel表查询）
+    monitoring_count = monitor_service.count_videos_by_channel_status(VideoStatus.MONITORING)
+    featured_count = monitor_service.count_videos_by_channel_status(VideoStatus.FEATURED)
+    declined_count = monitor_service.count_videos_by_channel_status(VideoStatus.DECLINED)
 
     # 获取赛道数量
     channels = channel_service.get_all_channels()

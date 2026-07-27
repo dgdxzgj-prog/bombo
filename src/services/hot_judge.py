@@ -309,12 +309,12 @@ class HotJudgeService:
 
     def get_featured_videos(self, channel: Optional[str] = None, limit: int = 100) -> List[Video]:
         """
-        获取已上榜的爆款视频列表
+        获取已上榜的爆款视频列表（从video_channel表查询）
         """
         if channel:
             videos = self.monitor_service.get_videos_by_channel(channel, limit=limit * 2)
         else:
-            videos = self.monitor_service.list_videos(status=VideoStatus.FEATURED, limit=limit * 2)
+            videos = self.monitor_service.get_featured_videos_from_channel(limit=limit * 2)
 
         scored_videos = []
         for video in videos:

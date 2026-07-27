@@ -392,6 +392,20 @@ class MonitorPoolService:
 
             return [self._row_to_video_with_online_from_channel(row) for row in results]
 
+    def count_videos_by_channel_status(self, status: VideoStatus) -> int:
+        """统计指定状态的视频数量（从video_channel表）"""
+        with get_db_session() as session:
+            result = session.execute(
+                text("""
+                    SELECT COUNT(DISTINCT mp.bvid)
+                    FROM monitor_pool mp
+                    JOIN video_channel vc ON mp.bvid = vc.video_bvid
+                    WHERE vc.status = :status
+                """),
+                {"status": status.value}
+            ).scalar()
+            return result or 0
+
     def get_all_monitoring_videos(self) -> List[Video]:
         """获取所有监控中的视频"""
         return self.get_videos_by_status(VideoStatus.MONITORING, limit=100000)
