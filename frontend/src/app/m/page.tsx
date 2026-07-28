@@ -498,7 +498,11 @@ function VideoCard({ video, formatViews }: VideoCardProps) {
             }`}
           >
             <Users className="w-2.5 h-2.5" />
-            {video.online_count >= 10000 ? (video.online_count / 10000).toFixed(1) + "万" : video.online_count}
+            {video.online_count >= 10000
+                ? (video.online_count / 10000).toFixed(1) + "万+"
+                : video.online_count > 1000
+                ? video.online_count + "+"
+                : video.online_count}
           </div>
         )}
         {/* Duration Badge */}

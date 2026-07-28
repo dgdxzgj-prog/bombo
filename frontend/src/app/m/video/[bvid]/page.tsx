@@ -193,7 +193,11 @@ export default function MobileVideoPage() {
               }`}
             >
               <Users className="w-3 h-3" />
-              {video.online_count >= 10000 ? (video.online_count / 10000).toFixed(1) + "万" : video.online_count}
+              {video.online_count >= 10000
+                ? (video.online_count / 10000).toFixed(1) + "万+"
+                : video.online_count > 1000
+                ? video.online_count + "+"
+                : video.online_count}
             </div>
           )}
           {video.duration && video.duration > 0 && (

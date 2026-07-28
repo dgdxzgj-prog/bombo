@@ -73,6 +73,7 @@ class SnapshotService:
 
             return {
                 "bvid": bvid,
+                "aid": video_data.get("aid", 0),
                 "author_mid": str(video_data.get("owner", {}).get("mid", "")),
                 "view_count": stat.get("view", 0),
                 "like_count": stat.get("like", 0),
@@ -86,16 +87,63 @@ class SnapshotService:
             print(f"Get video detail error: {e}")
             return None
 
+    def _parse_chinese_number(self, num_str: str) -> int:
+        """
+        解析中文数字格式字符串，如 "2.5万+"、"1万+"、"1000+"
+        返回整数值
+        """
+        if not num_str:
+            return 0
+
+        # 去除空格
+        num_str = num_str.strip()
+
+        # 去除末尾的 "+" 号
+        num_str = num_str.rstrip("+")
+
+        # 如果包含"万"字
+        if "万" in num_str:
+            try:
+                # 去除"万"字，取数字部分乘以10000
+                num_str = num_str.replace("万", "")
+                value = float(num_str) * 10000
+                return int(value)
+            except (ValueError, TypeError):
+                return 0
+
+        # 如果包含"亿"字
+        if "亿" in num_str:
+            try:
+                num_str = num_str.replace("亿", "")
+                value = float(num_str) * 100000000
+                return int(value)
+            except (ValueError, TypeError):
+                return 0
+
+        # 普通数字格式，直接转整数
+        try:
+            return int(num_str)
+        except (ValueError, TypeError):
+            return 0
+
     def get_video_detail(self, bvid: str) -> Optional[Dict[str, Any]]:
         """获取视频详情"""
         return self._sync(self._get_video_detail_async(bvid))
 
-    def get_online_count(self, bvid: str, cid: int) -> int:
-        """获取视频实时在线人数"""
+    def get_online_count(self, bvid: str, cid: int, aid: int = 0) -> int:
+        """获取视频实时在线人数
+
+        Args:
+            bvid: 视频BV号
+            cid: 视频分P cid
+            aid: 视频avid（可选，如果不传会从video_data获取）
+        """
         import requests
         try:
             url = "https://api.bilibili.com/x/player/online/total"
             params = {"bvid": bvid, "cid": cid}
+            if aid:
+                params["aid"] = aid
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://www.bilibili.com",
@@ -105,13 +153,12 @@ class SnapshotService:
             data = response.json()
 
             if data.get("code") == 0:
-                # B站API返回 {"total": "1000+", "count": "643"}
-                # count 是数字字符串，total 可能是 "1000+" 格式
-                count_str = data.get("data", {}).get("count", "0")
-                try:
-                    return int(count_str)
-                except (ValueError, TypeError):
-                    return 0
+                # B站API返回 {"total": "1000+", "count": "643"} 或 {"total": "2.5万+", "count": "8702"}
+                # total 是实时在线人数（可能带"+"号或"万"单位），count 是累计观看
+                total_str = data.get("data", {}).get("total", "0")
+                # 处理中文数字格式（如 "2.5万+"、"1万+"）
+                total_str = self._parse_chinese_number(total_str)
+                return total_str
             return 0
         except Exception as e:
             print(f"Get online count error: {e}")
@@ -354,7 +401,7 @@ class SnapshotService:
         # 获取实时在线人数（同步方法，直接调用）
         online_count = 0
         if detail.get("cid"):
-            online_count = self.get_online_count(bvid, detail["cid"])
+            online_count = self.get_online_count(bvid, detail["cid"], detail.get("aid", 0))
 
         # 获取当前整点时间
         now = datetime.now().replace(minute=0, second=0, microsecond=0)
@@ -396,7 +443,7 @@ class SnapshotService:
                 # 获取在线人数
                 online_count = 0
                 if detail.get("cid"):
-                    online_count = self.get_online_count(bvid, detail["cid"])
+                    online_count = self.get_online_count(bvid, detail["cid"], detail.get("aid", 0))
 
                 # 获取当前整点时间
                 now = datetime.now().replace(minute=0, second=0, microsecond=0)

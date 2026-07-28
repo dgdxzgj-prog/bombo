@@ -6,10 +6,10 @@ import { Home, Bookmark, CreditCard, User } from "lucide-react";
 import clsx from "clsx";
 
 const tabs = [
-  { name: "榜单", href: "/m", icon: Home },
-  { name: "自选赛道", href: "/m/analysis", icon: Bookmark },
-  { name: "会员", href: "/m/pricing", icon: CreditCard },
-  { name: "我的", href: "/m/profile", icon: User },
+  { name: "榜单", href: "/m", icon: Home, disabled: false },
+  { name: "自选赛道", href: "/m/analysis", icon: Bookmark, disabled: true },
+  { name: "会员", href: "/m/pricing", icon: CreditCard, disabled: true },
+  { name: "我的", href: "/m/profile", icon: User, disabled: false },
 ];
 
 export function MobileTabBar() {
@@ -27,6 +27,22 @@ export function MobileTabBar() {
       <div className="flex justify-around items-center h-14 max-w-lg mx-auto">
         {tabs.map((tab) => {
           const active = isActive(tab.href);
+          const disabled = tab.disabled;
+
+          if (disabled) {
+            return (
+              <span
+                key={tab.name}
+                className="flex flex-col items-center justify-center w-full h-full text-gray-400 cursor-not-allowed"
+              >
+                <tab.icon className="w-5 h-5 text-gray-400" />
+                <span className="text-xs mt-0.5 text-gray-400">
+                  {tab.name}
+                </span>
+              </span>
+            );
+          }
+
           return (
             <Link
               key={tab.name}
