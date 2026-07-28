@@ -800,11 +800,14 @@ def video_cleanup_task() -> dict:
 
 def region_ranking_task() -> dict:
     """
-    分区热榜视频采集任务
-    每24小时执行一次
-    从22个标准赛道的B站分区获取热榜视频并入库
-    新视频直接写入featured状态，同时设置AI分析标记
+    全站热榜视频采集任务
+    每6小时执行一次
+    从B站全站热榜(rid=0, day=3)获取视频并入库
+    根据pid_name_v2进行赛道匹配
+    新视频直接写入featured状态
     """
+    from src.crawlers.daily_hot_api import normalize_channel
+
     client = DailyHotApiClient()
     monitor_service = MonitorPoolService()
     discoverer = VideoDiscoverer()
@@ -812,107 +815,79 @@ def region_ranking_task() -> dict:
     saved_count = 0
     skip_count = 0
     error_count = 0
-    total_videos = 0
 
     print(f"[{datetime.now().isoformat()}] Starting region ranking task...")
 
-    # 从数据库获取有效状态的赛道
-    from src.utils.database import get_db_session
-    from sqlalchemy import text
+    try:
+        # 获取全站热榜视频（rid=0, day=3）
+        videos = client.get_region_ranking(limit=50)
+        print(f"[{datetime.now().isoformat()}] Fetched {len(videos)} videos from ranking API")
+    except Exception as e:
+        print(f"  Failed to fetch ranking: {e}")
+        videos = []
 
-    active_tracks = {}
-    with get_db_session() as session:
-        result = session.execute(
-            text("""
-                SELECT trm.track_id, trm.rid, cc.channel_name
-                FROM track_rid_mapping trm
-                JOIN channel_config cc ON trm.track_id = cc.channel_id
-                WHERE cc.status = 'active' AND cc.created_by = 1
-            """)
-        ).fetchall()
-        for row in result:
-            active_tracks[row[0]] = {'rid': row[1], 'channel_name': row[2]}
-
-    print(f"[{datetime.now().isoformat()}] Found {len(active_tracks)} active channels")
-
-    # 遍历有效状态的赛道
-    for track_id, info in active_tracks.items():
-        rid = info['rid']
-        channel_name = info['channel_name']
-        print(f"[{datetime.now().isoformat()}] Fetching region ranking: {track_id} (rid={rid})...")
-
+    for hot_video in videos:
         try:
-            videos = client.get_region_ranking(rid=rid, limit=20)
-        except Exception as e:
-            print(f"  Failed to fetch region {track_id}: {e}")
-            videos = []
-
-        total_videos += len(videos)
-
-        for hot_video in videos:
-            try:
-                # 检查是否已存在
-                existing = monitor_service.get_video_by_bvid(hot_video.bvid)
-                if existing:
-                    skip_count += 1
-                    continue
-
-                # 使用VideoDiscoverer获取作者MID
-                detail = discoverer.get_video_detail(hot_video.bvid)
-                author_mid = detail.author_mid if detail else ""
-
-                # 转换为Video对象
-                pubdate = None
-                if hot_video.pubdate:
-                    pubdate = datetime.fromtimestamp(hot_video.pubdate)
-
-                # 新视频直接写入featured状态
-                video = Video(
-                    bvid=hot_video.bvid,
-                    title=hot_video.title,
-                    author=hot_video.author,
-                    author_mid=author_mid or None,
-                    channel=channel_name,
-                    keyword="分区热榜",
-                    view_yesterday=0,
-                    view_today=hot_video.play,
-                    growth_rate=0.0,
-                    like_count=hot_video.like,
-                    favorite_count=hot_video.favorite,
-                    reply_count=hot_video.reply,
-                    pubdate=pubdate,
-                    cover_url=hot_video.pic,
-                    status=VideoStatus.FEATURED,
-                )
-
-                monitor_service.add_video(video)
-                # 写入video_channel表，状态为featured（爆款）
-                monitor_service.add_video_channel_with_status(
-                    video.bvid,
-                    channel_name,
-                    "featured"
-                )
-
-                # 设置AI分析标记
-                if video.author_mid:
-                    monitor_service.set_need_author_collect(video.bvid)
-
-                saved_count += 1
-                print(f"  Added: {hot_video.bvid} - {safe_str(hot_video.title, 30)}")
-
-            except ValueError:
-                # 重复视频
+            # 检查是否已存在
+            existing = monitor_service.get_video_by_bvid(hot_video.bvid)
+            if existing:
                 skip_count += 1
-            except Exception as e:
-                error_count += 1
-                print(f"  Error adding {hot_video.bvid}: {e}")
+                continue
+
+            # 根据pid_name_v2匹配赛道
+            channel_name = normalize_channel(hot_video.tname, hot_video.pid_name_v2)
+
+            # 使用VideoDiscoverer获取作者MID
+            detail = discoverer.get_video_detail(hot_video.bvid)
+            author_mid = detail.author_mid if detail else ""
+
+            # 转换为Video对象
+            pubdate = None
+            if hot_video.pubdate:
+                pubdate = datetime.fromtimestamp(hot_video.pubdate)
+
+            # 新视频直接写入featured状态
+            video = Video(
+                bvid=hot_video.bvid,
+                title=hot_video.title,
+                author=hot_video.author,
+                author_mid=author_mid or None,
+                channel=channel_name,
+                keyword="全站热榜",
+                view_yesterday=0,
+                view_today=hot_video.play,
+                growth_rate=0.0,
+                like_count=hot_video.like,
+                favorite_count=hot_video.favorite,
+                reply_count=hot_video.reply,
+                pubdate=pubdate,
+                cover_url=hot_video.pic,
+                status=VideoStatus.FEATURED,
+            )
+
+            monitor_service.add_video(video)
+            # 写入video_channel表，状态为featured（爆款）
+            monitor_service.add_video_channel_with_status(
+                video.bvid,
+                channel_name,
+                "featured"
+            )
+
+            saved_count += 1
+            print(f"  Added: [{channel_name}] {hot_video.bvid} - {safe_str(hot_video.title, 30)}")
+
+        except ValueError:
+            # 重复视频
+            skip_count += 1
+        except Exception as e:
+            error_count += 1
+            print(f"  Error adding {hot_video.bvid}: {e}")
 
         # 避免请求过快
-        import time
-        time.sleep(1)
+        time.sleep(0.5)
 
     result = {
-        "total_fetched": total_videos,
+        "total_fetched": len(videos),
         "saved": saved_count,
         "skipped": skip_count,
         "errors": error_count,
@@ -942,13 +917,14 @@ def init_video_tasks() -> None:
     """
     scheduler = get_scheduler()
 
-    # 分区热榜任务 - 每24小时（从22个标准赛道获取分区热榜）
-    # 新视频直接入库为爆款状态，由daily_video_judgment进行衰退判定
+    # 全站热榜任务 - 每6小时
+    # 从B站全站热榜(rid=0, day=3)获取视频，根据pid_name_v2匹配赛道
+    # 新视频直接入库为爆款状态
     scheduler.add_interval_task(
         task_id="region_ranking",
         name="Region Ranking",
         func=region_ranking_task,
-        interval_seconds=24 * 3600,  # 24小时
+        interval_seconds=6 * 3600,  # 6小时
     )
 
     # 新视频发现任务 - 每6小时（已暂停）

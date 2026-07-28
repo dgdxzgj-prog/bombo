@@ -100,17 +100,48 @@ for _standard, _subchannels in CHANNEL_MAPPING.items():
     for _sub in _subchannels:
         _SUBCHANNEL_TO_STANDARD[_sub] = _standard
 
+# pid_name_v2（父分区名称）到标准赛道的映射
+PID_NAME_V2_TO_CHANNEL = {
+    "二次元": "动画",
+    "动画": "动画",
+    "音乐": "音乐",
+    "游戏": "游戏",
+    "娱乐": "娱乐",
+    "舞蹈": "舞蹈",
+    "影视": "影视",
+    "生活": "生活",
+    "鬼畜": "鬼畜",
+    "科技": "科技",
+    "运动": "运动",
+    "汽车": "汽车",
+    "知识": "知识",
+    "资讯": "资讯",
+    "美食": "美食",
+    "动物": "动物圈",
+    "时尚": "时尚",
+    "国创": "国创",
+    "番剧": "番剧",
+    "电影": "电影",
+    "纪录片": "纪录片",
+    "小说": "艺术",
+}
 
-def normalize_channel(channel: str) -> str:
+
+def normalize_channel(channel: str, pid_name_v2: str = None) -> str:
     """
     将B站细分赛道归类到21个标准赛道
 
     Args:
         channel: B站返回的原始赛道名称
+        pid_name_v2: 父分区名称（v2版）
 
     Returns:
         对应的21个标准赛道之一
     """
+    # 优先使用 pid_name_v2 映射
+    if pid_name_v2 and pid_name_v2 in PID_NAME_V2_TO_CHANNEL:
+        return PID_NAME_V2_TO_CHANNEL[pid_name_v2]
+
     if not channel:
         return '生活'
 
@@ -146,6 +177,7 @@ class HotVideoItem:
     duration: int  # 视频时长(秒)
     tid: int  # 分区ID
     tname: str  # 分区名称（原始赛道，归类后可能变化）
+    pid_name_v2: Optional[str] = None  # 父分区名称（v2版，如"二次元"）
     tags: Optional[List[str]] = None  # 视频标签列表
 
 
@@ -303,6 +335,7 @@ class DailyHotApiClient:
                     duration=item.get("duration", 0),
                     tid=item.get("tid", 0),
                     tname=item.get("tname", ""),
+                    pid_name_v2=item.get("pid_name_v2"),  # 父分区名称
                     tags=None,  # 热榜API不返回标签，需单独获取
                 )
 
@@ -413,18 +446,17 @@ class DailyHotApiClient:
 
         return all_videos
 
-    def get_region_ranking(self, rid: int, limit: int = 20) -> List[HotVideoItem]:
+    def get_region_ranking(self, limit: int = 50) -> List[HotVideoItem]:
         """
-        获取指定分区的热榜视频
+        获取全站热榜视频（使用rid=0, day=3）
 
         Args:
-            rid: B站分区ID
             limit: 返回数量上限
 
         Returns:
-            分区热榜视频列表
+            热榜视频列表
         """
-        url = f"https://api.bilibili.com/x/web-interface/ranking/v2?rid={rid}&type=all&day=1"
+        url = f"https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all&day=3"
 
         videos = self._fetch_bilibili_api(url, limit)
         return videos if videos else []
