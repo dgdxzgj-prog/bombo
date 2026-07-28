@@ -184,11 +184,10 @@ class TrackAdaptiveThresholdService:
 
         if sample_count >= config["min_sample_count"]:
             # 样本充足，使用平均值计算阈值
-            hysteresis_ratio = config["hysteresis_ratio"]
-
-            # 使用平均值作为阈值基准
+            # T_UP = 平均在线人数
+            # T_DOWN = 平均在线人数的 30%
             t_up = self.calculate_average(online_history)
-            t_down = int(t_up * hysteresis_ratio)
+            t_down = int(t_up * 0.30)
 
             # 确保不低于保底阈值（20、15）
             t_up = max(t_up, 20)

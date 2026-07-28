@@ -306,13 +306,13 @@ def daily_hot_video_task() -> dict:
 
 def ai_analyze_featured_task() -> dict:
     """
-    AI分析爆款视频任务
-    对已上榜(featured状态)的视频进行AI分析
+    AI分析视频任务
+    对监控池中所有还没有AI分析记录的视频进行AI分析
     分析封面和内容两个维度
     如果视频没有封面则跳过封面分析
 
     注意：此任务应在hourly_video_update完成后执行
-    每次最多分析50个视频，避免API rate limit问题
+    每次最多分析3个视频，避免API rate limit问题
     """
     # 检查是否启用 AI 分析
     if not settings.ENABLE_AI_ANALYSIS:
@@ -321,32 +321,69 @@ def ai_analyze_featured_task() -> dict:
 
     print(f"[{datetime.now().isoformat()}] Starting AI analysis task...")
 
-    monitor_service = MonitorPoolService()
     ai_service = get_ai_analysis_service()
 
-    # 从video_channel表获取featured状态的视频，每次只分析1个
-    # 任务每小时执行一次，每次只分析1个视频避免API过载
-    featured_videos = monitor_service.get_featured_videos_from_channel(limit=1)
+    # 从monitor_pool获取还没有AI分析记录的视频
+    # 使用LEFT JOIN ai_cache找到没有分析记录的视频
+    with get_db_session() as session:
+        results = session.execute(
+            text("""
+                SELECT mp.id, mp.bvid, mp.title, mp.author, mp.channel, mp.keyword,
+                       mp.view_yesterday, mp.view_today, mp.growth_rate,
+                       mp.like_count, mp.favorite_count, mp.reply_count,
+                       mp.coin_count, mp.share_count, mp.danmu_count,
+                       mp.online_count, mp.max_online_today,
+                       mp.pubdate, mp.cover_url,
+                       mp.first_seen, mp.last_collected, mp.created_at, mp.updated_at,
+                       vc.status as channel_status
+                FROM monitor_pool mp
+                JOIN video_channel vc ON mp.bvid = vc.video_bvid
+                LEFT JOIN ai_cache ac ON mp.bvid = ac.bvid
+                WHERE ac.bvid IS NULL
+                ORDER BY mp.view_today DESC
+                LIMIT 3
+            """)
+        ).fetchall()
 
-    print(f"[{datetime.now().isoformat()}] Found {len(featured_videos)} featured videos to analyze")
+    # 转换为Video对象
+    videos = []
+    for row in results:
+        video = Video(
+            id=row[0],
+            bvid=row[1],
+            title=row[2],
+            author=row[3],
+            channel=row[4],
+            keyword=row[5],
+            view_yesterday=row[6],
+            view_today=row[7],
+            growth_rate=row[8] or 0.0,
+            like_count=row[9] or 0,
+            favorite_count=row[10] or 0,
+            reply_count=row[11] or 0,
+            coin_count=row[12] or 0,
+            share_count=row[13] or 0,
+            danmu_count=row[14] or 0,
+            online_count=row[15],
+            max_online_today=row[16],
+            pubdate=row[17],
+            cover_url=row[18],
+            first_seen=row[19],
+            last_collected=row[20],
+            created_at=row[21],
+            updated_at=row[22],
+        )
+        videos.append(video)
+
+    print(f"[{datetime.now().isoformat()}] Found {len(videos)} videos without AI analysis")
 
     # 先尝试从缓存获取已分析的视频
     analyzed_count = 0
     skipped_count = 0
     error_count = 0
 
-    for video in featured_videos:
+    for video in videos:
         try:
-            # 尝试获取缓存的分析结果
-            cached = ai_service.get_cached_analysis(video.bvid)
-            if cached:
-                # 检查缓存是否完整
-                cover_missing = cached.cover_analysis is None and video.cover_url
-                content_missing = cached.content_analysis is None
-                if not cover_missing and not content_missing:
-                    skipped_count += 1
-                    continue
-
             # 决定分析类型
             analysis_type = "content"  # 至少分析内容
             if video.cover_url:
@@ -376,7 +413,7 @@ def ai_analyze_featured_task() -> dict:
             print(f"  Error analyzing {video.bvid}: {e}")
 
     result = {
-        "total": len(featured_videos),
+        "total": len(videos),
         "analyzed": analyzed_count,
         "skipped": skipped_count,
         "errors": error_count,
