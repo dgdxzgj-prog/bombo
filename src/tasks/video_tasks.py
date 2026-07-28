@@ -1029,11 +1029,12 @@ def init_video_tasks() -> None:
         minute=30,
     )
 
-    # 重新调度四个任务，实现分时执行
+    # 重新调度分时执行任务，避免同时执行
     # region_ranking: 启动时立即执行一次（采集热榜视频入库为爆款）
-    # daily_hot: 立即执行
-    # hourly_video_update: 延迟5分钟执行
-    # ai_analyze_featured: 延迟10分钟执行
+    # daily_hot: 立即执行（热点采集）
+    # hourly_video_update: 延迟5分钟执行（视频数据更新）
+    # ai_analyze_featured: 延迟10分钟执行（AI分析）
     scheduler._schedule_task(scheduler.tasks["region_ranking"], initial_delay=0)
+    scheduler._schedule_task(scheduler.tasks["daily_hot"], initial_delay=0)
     scheduler._schedule_task(scheduler.tasks["hourly_video_update"], initial_delay=300)
     scheduler._schedule_task(scheduler.tasks["ai_analyze_featured"], initial_delay=600)
