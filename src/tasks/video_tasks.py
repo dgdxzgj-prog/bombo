@@ -341,7 +341,7 @@ def ai_analyze_featured_task() -> dict:
                 LEFT JOIN ai_cache ac ON mp.bvid = ac.bvid
                 WHERE ac.bvid IS NULL
                 ORDER BY mp.view_today DESC
-                LIMIT 3
+                LIMIT 50
             """)
         ).fetchall()
 
