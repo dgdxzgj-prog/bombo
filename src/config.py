@@ -35,7 +35,8 @@ class Settings(BaseModel):
     AI_PROVIDER: str = "gemini"  # "gemini" 或 "doubao"
     GEMINI_API_KEY: str = ""
     ARK_API_KEY: str = ""
-    DOUBAO_MODEL: str = "doubao-seed-2-0-lite-260428"
+    OPENROUTER_API_KEY: str = ""
+    DOUBAO_MODEL: str = "qwen/qwen3.7-flash"
     ENABLE_AI_ANALYSIS: bool = True
 
     # 日志配置
@@ -59,7 +60,8 @@ def _get_settings() -> Settings:
         AI_PROVIDER=os.getenv("AI_PROVIDER", "gemini"),
         GEMINI_API_KEY=os.getenv("GEMINI_API_KEY", ""),
         ARK_API_KEY=os.getenv("ARK_API_KEY", ""),
-        DOUBAO_MODEL=os.getenv("DOUBAO_MODEL", "doubao-seed-2-0-lite-260428"),
+        OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY", ""),
+        DOUBAO_MODEL=os.getenv("DOUBAO_MODEL", "qwen/qwen3.7-flash"),
         ENABLE_AI_ANALYSIS=os.getenv("ENABLE_AI_ANALYSIS", "true").lower() == "true",
         LOG_LEVEL=os.getenv("LOG_LEVEL", "INFO"),
     )

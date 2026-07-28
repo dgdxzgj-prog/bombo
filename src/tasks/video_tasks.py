@@ -361,7 +361,7 @@ def ai_analyze_featured_task() -> dict:
 
             if result:
                 # 缓存分析结果
-                ai_service.cache_analysis(result)
+                ai_service.cache_analysis(result, title=video.title, cover_url=video.cover_url)
                 analyzed_count += 1
                 print(f"  Analyzed: {video.bvid} - {safe_str(video.title, 30)}")
             else:
@@ -764,9 +764,9 @@ def video_cleanup_task() -> dict:
 def region_ranking_task() -> dict:
     """
     分区热榜视频采集任务
-    每6小时执行一次
+    每24小时执行一次
     从22个标准赛道的B站分区获取热榜视频并入库
-    新视频统一写入monitoring状态，由daily_video_judgment根据在线人数阈值判定
+    新视频直接写入featured状态，同时设置AI分析标记
     """
     client = DailyHotApiClient()
     monitor_service = MonitorPoolService()
@@ -829,7 +829,7 @@ def region_ranking_task() -> dict:
                 if hot_video.pubdate:
                     pubdate = datetime.fromtimestamp(hot_video.pubdate)
 
-                # 新视频统一写入monitoring状态
+                # 新视频直接写入featured状态
                 video = Video(
                     bvid=hot_video.bvid,
                     title=hot_video.title,
@@ -845,16 +845,20 @@ def region_ranking_task() -> dict:
                     reply_count=hot_video.reply,
                     pubdate=pubdate,
                     cover_url=hot_video.pic,
-                    status=VideoStatus.MONITORING,
+                    status=VideoStatus.FEATURED,
                 )
 
                 monitor_service.add_video(video)
-                # 写入video_channel表，状态为monitoring
+                # 写入video_channel表，状态为featured（爆款）
                 monitor_service.add_video_channel_with_status(
                     video.bvid,
                     channel_name,
-                    "monitoring"
+                    "featured"
                 )
+
+                # 设置AI分析标记
+                if video.author_mid:
+                    monitor_service.set_need_author_collect(video.bvid)
 
                 saved_count += 1
                 print(f"  Added: {hot_video.bvid} - {safe_str(hot_video.title, 30)}")
@@ -901,12 +905,13 @@ def init_video_tasks() -> None:
     """
     scheduler = get_scheduler()
 
-    # 分区热榜任务 - 每6小时（从22个标准赛道获取分区热榜）
+    # 分区热榜任务 - 每24小时（从22个标准赛道获取分区热榜）
+    # 新视频直接入库为爆款状态，由daily_video_judgment进行衰退判定
     scheduler.add_interval_task(
         task_id="region_ranking",
         name="Region Ranking",
         func=region_ranking_task,
-        interval_seconds=6 * 3600,  # 6小时
+        interval_seconds=24 * 3600,  # 24小时
     )
 
     # 新视频发现任务 - 每6小时（已暂停）
@@ -987,9 +992,11 @@ def init_video_tasks() -> None:
         minute=30,
     )
 
-    # 重新调度三个任务，实现分时执行
+    # 重新调度四个任务，实现分时执行
+    # region_ranking: 启动时立即执行一次（采集热榜视频入库为爆款）
     # daily_hot: 立即执行
     # hourly_video_update: 延迟5分钟执行
     # ai_analyze_featured: 延迟10分钟执行
+    scheduler._schedule_task(scheduler.tasks["region_ranking"], initial_delay=0)
     scheduler._schedule_task(scheduler.tasks["hourly_video_update"], initial_delay=300)
     scheduler._schedule_task(scheduler.tasks["ai_analyze_featured"], initial_delay=600)

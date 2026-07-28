@@ -187,7 +187,7 @@ export default function MobileVideoPage() {
               className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${
                 video.online_count > 10000
                   ? "bg-red-50 border-red-400 text-red-600"
-                  : video.online_count > 1000
+                  : video.online_count >= 1000
                   ? "bg-orange-50 border-orange-400 text-orange-600"
                   : "bg-yellow-50 border-yellow-400 text-yellow-600"
               }`}
@@ -195,7 +195,7 @@ export default function MobileVideoPage() {
               <Users className="w-3 h-3" />
               {video.online_count >= 10000
                 ? (video.online_count / 10000).toFixed(1) + "万+"
-                : video.online_count > 1000
+                : video.online_count >= 1000
                 ? video.online_count + "+"
                 : video.online_count}
             </div>

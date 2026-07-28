@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS ai_cache (
     id              BIGSERIAL PRIMARY KEY,
     bvid            VARCHAR(20) NOT NULL,
     analysis_type   VARCHAR(50) NOT NULL,
+    title           VARCHAR(500),
+    cover_url       TEXT,
     result_data     JSONB,
     cached_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
