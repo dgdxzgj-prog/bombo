@@ -111,6 +111,14 @@ export function useDashboardStats() {
   });
 }
 
+export function useBrowseStats() {
+  return useQuery({
+    queryKey: ["dashboard", "browse-stats"],
+    queryFn: api.getBrowseStats,
+    refetchInterval: 30000,
+  });
+}
+
 export function useDashboardFeaturedVideos(limit: number = 10) {
   return useQuery({
     queryKey: queryKeys.featuredVideos,

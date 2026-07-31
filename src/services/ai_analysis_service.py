@@ -210,6 +210,13 @@ class DoubaoService:
         else:
             duration_str = "未知"
 
+        # 格式化发布时间
+        pubdate = video.pubdate
+        if pubdate:
+            pubdate_str = pubdate.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            pubdate_str = "未知"
+
         # 格式化标签
         tags = video.tags
         if tags:
@@ -223,6 +230,7 @@ class DoubaoService:
             video_title=video.title,
             author=video.author,
             channel=video.channel,
+            pubdate=pubdate_str,
             description=getattr(video, 'description', '') or '无',
             duration=duration_str,
             tags=tags_str,
@@ -231,9 +239,6 @@ class DoubaoService:
             like_count=video.like_count,
             favorite_count=video.favorite_count,
             reply_count=video.reply_count,
-            coin_count=video.coin_count,
-            share_count=video.share_count,
-            author_fans=getattr(video, 'author_fans', 0) or 0,
         )
 
     def _parse_cover_response(self, bvid: str, response: Dict[str, Any]) -> Optional[VideoAnalysisResult]:

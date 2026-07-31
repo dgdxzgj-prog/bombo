@@ -133,6 +133,55 @@ export default function MobileVideoPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // 关键词高亮函数
+  // 本质（单引号内）的关键词用粉色，+号保持黑色
+  // 正文中的**加粗**关键词用紫色
+  // 每个点之间空出一行
+  const highlightKeywords = (text: string) => {
+    if (!text) return text;
+
+    // 步骤1: 格式化文本 - 添加空行分隔
+    let formatted = text
+      // 本质后面加空行
+      .replace(/(的三重叠加[。])/g, '$1\n\n')
+      // 每个点前加两个空行（点与点之间空出一行）
+      .replace(/第一点：/g, '\n\n第一点：')
+      .replace(/第二点：/g, '\n\n第二点：')
+      .replace(/第三点：/g, '\n\n第三点：')
+      // 清理多余空行
+      .replace(/\n{3,}/g, '\n\n');
+
+    let result = formatted;
+
+    // 步骤2: 处理本质描述中单引号内的内容（粉色，+号除外）
+    result = result.replace(
+      /'([^']*)'/g,
+      (match, inner) => {
+        // 移除所有**加粗**标记，只保留文字
+        let cleanInner = inner.replace(/\*\*/g, '');
+        // 将单引号内的每个词用粉色包裹，+号保持原样
+        let processed = cleanInner.replace(
+          /([^+\s]+)/g,
+          '<span class="text-pink-500">$1</span>'
+        );
+        return `'${processed}'`;
+      }
+    );
+
+    // 步骤3: 处理正文中的**加粗**关键词（紫色）
+    result = result.replace(
+      /\*\*([^*]+)\*\*/g,
+      '<span class="text-violet-600 font-semibold">$1</span>'
+    );
+
+    return result;
+  };
+
+  // 转义正则特殊字符
+  const escapeRegex = (str: string) => {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -268,7 +317,10 @@ export default function MobileVideoPage() {
             {video.ai_analysis.content_analysis.summaryInsight && (
               <div className="bg-white rounded-xl p-3 shadow-sm">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">爆款分析</h3>
-                <p className="text-xs text-gray-600 whitespace-pre-wrap">{video.ai_analysis.content_analysis.summaryInsight}</p>
+                <p
+                  className="text-xs text-gray-600 whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{ __html: highlightKeywords(video.ai_analysis.content_analysis.summaryInsight) }}
+                />
               </div>
             )}
 

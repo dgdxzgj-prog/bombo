@@ -160,6 +160,12 @@ export interface DashboardStats {
   };
   ai_analyzed: number;
   timestamp: string;
+  user_growth?: { date: string; count: number }[];
+  total_users?: number;
+}
+
+export interface BrowseStats {
+  browse_trend: { date: string; count: number }[];
 }
 
 export interface FeaturedVideosResponse {

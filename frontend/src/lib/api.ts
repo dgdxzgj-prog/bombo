@@ -12,6 +12,7 @@ import type {
   DashboardStats,
   FeaturedVideosResponse,
   ApiError,
+  BrowseStats,
 } from "@/types";
 
 // 使用相对路径，通过 Next.js rewrites 代理到后端
@@ -162,6 +163,13 @@ export const api = {
     const token = localStorage.getItem("bombo_token");
     const client = createApiClient(token);
     const response = await client.get<DashboardStats>("/api/dashboard/stats");
+    return response.data;
+  },
+
+  getBrowseStats: async (): Promise<BrowseStats> => {
+    const token = localStorage.getItem("bombo_token");
+    const client = createApiClient(token);
+    const response = await client.get<BrowseStats>("/api/dashboard/browse-stats");
     return response.data;
   },
 

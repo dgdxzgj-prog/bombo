@@ -549,8 +549,7 @@ def daily_video_judgment_task() -> dict:
     遍历所有处于monitor/hit状态的视频，执行爆款判定
     规则：
     - 爆款状态：max_online_today >= T_up → 升级爆款
-    - hit状态：max_online_today < T_down → 降级衰退
-    - 视频入库小于24小时不参与判定
+    - hit状态：max_online_today < T_down → 降级衰退（仅入库超过7天的视频参与降级判定）
     - 判定完成后重置max_online_today为0
     """
     print(f"[{datetime.now().isoformat()}] Starting daily video judgment...")
@@ -582,7 +581,7 @@ def daily_video_judgment_task() -> dict:
         with get_db_session() as session:
             results = session.execute(
                 text("""
-                    SELECT mp.bvid, mp.max_online_today, mp.first_featured_at,
+                    SELECT mp.bvid, mp.max_online_today, mp.first_featured_at, mp.first_seen,
                            vc.status as channel_status
                     FROM monitor_pool mp
                     JOIN video_channel vc ON mp.bvid = vc.video_bvid
@@ -596,16 +595,8 @@ def daily_video_judgment_task() -> dict:
             bvid = row[0]
             max_online_today = row[1] or 0
             first_featured_at = row[2]
-            current_status = row[3]
-
-            # 检查是否冷启动（入库/上榜小于24小时）
-            if first_featured_at:
-                age_hours = (now - first_featured_at).total_seconds() / 3600
-                if age_hours < 24:
-                    skipped_cold_start += 1
-                    # 重置max_online_today但不改变状态
-                    monitor_service.update_video_max_online_today(bvid, 0)
-                    continue
+            first_seen = row[3]
+            current_status = row[4]
 
             # 执行判定
             if current_status == "monitoring":
@@ -617,11 +608,15 @@ def daily_video_judgment_task() -> dict:
                     upgraded_count += 1
                     print(f"  [{channel_id}] {bvid}: monitoring → featured (max_online={max_online_today}, t_up={t_up})")
             elif current_status == "featured":
-                # 爆款 → 衰退判定
-                if max_online_today < t_down:
-                    monitor_service.update_video_channel_status(bvid, channel_id, VideoStatus.DECLINED)
-                    demoted_count += 1
-                    print(f"  [{channel_id}] {bvid}: featured → declined (max_online={max_online_today}, t_down={t_down})")
+                # 爆款 → 衰退判定（入库超过7天才参与降级判定）
+                if first_seen:
+                    days_since_seen = (now - first_seen).days
+                    if days_since_seen >= 7 and max_online_today < t_down:
+                        monitor_service.update_video_channel_status(bvid, channel_id, VideoStatus.DECLINED)
+                        demoted_count += 1
+                        print(f"  [{channel_id}] {bvid}: featured → declined (max_online={max_online_today}, t_down={t_down}, days_since_seen={days_since_seen})")
+                    elif days_since_seen < 7:
+                        skipped_cold_start += 1
 
             # 重置max_online_today
             monitor_service.update_video_max_online_today(bvid, 0)
@@ -639,7 +634,7 @@ def daily_video_judgment_task() -> dict:
     print(f"[{datetime.now().isoformat()}] Daily video judgment completed:")
     print(f"  Upgraded (monitoring→featured): {upgraded_count}")
     print(f"  Demoted (featured→declined): {demoted_count}")
-    print(f"  Skipped (cold start <24h): {skipped_cold_start}")
+    print(f"  Skipped (入库不足7天): {skipped_cold_start}")
     print(f"  Skipped (no threshold): {skipped_no_threshold}")
     print(f"  Reset max_online_today: {reset_count}")
 

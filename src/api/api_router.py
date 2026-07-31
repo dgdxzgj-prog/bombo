@@ -612,6 +612,38 @@ async def judge_video(
     )
 
 
+@video_router.post("/{bvid}/analyze")
+async def trigger_ai_analyze(
+    bvid: str,
+    authorization: str = Header(None),
+):
+    """手动触发AI分析视频"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    monitor_service = MonitorPoolService()
+    video = monitor_service.get_video_by_bvid(bvid)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # 在线程池中执行AI分析（因为涉及同步的IO操作）
+    def run_ai_analysis():
+        ai_service = get_ai_analysis_service()
+        return ai_service.analyze_video(video)
+
+    loop = asyncio.get_event_loop()
+    ai_result = await loop.run_in_executor(None, run_ai_analysis)
+
+    if ai_result:
+        # 缓存分析结果
+        ai_service = get_ai_analysis_service()
+        ai_service.cache_analysis(ai_result, title=video.title, cover_url=video.cover_url)
+        return {"success": True, "message": "AI analysis completed", "bvid": bvid}
+    else:
+        raise HTTPException(status_code=500, detail="AI analysis failed")
+
+
 # 赛道路由
 channel_router = APIRouter(prefix="/api/channels", tags=["赛道"])
 
@@ -1138,6 +1170,22 @@ async def get_dashboard_stats(authorization: str = Header(None)):
             text("SELECT COUNT(DISTINCT bvid) FROM ai_cache")
         ).scalar() or 0
 
+    # 获取最近7天用户注册数量趋势
+    user_growth = session.execute(
+        text("""
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM users
+            WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+            GROUP BY DATE(created_at)
+            ORDER BY date
+        """)
+    ).fetchall()
+
+    # 获取总用户数
+    total_users = session.execute(
+        text("SELECT COUNT(*) FROM users")
+    ).scalar() or 0
+
     return {
         "videos": {
             "monitoring": monitoring_count,
@@ -1151,8 +1199,60 @@ async def get_dashboard_stats(authorization: str = Header(None)):
             "unlocked": channel_count - locked_count,
         },
         "ai_analyzed": ai_analyzed_count,
+        "user_growth": [{"date": str(row[0]), "count": row[1]} for row in user_growth],
+        "total_users": total_users,
         "timestamp": datetime.now().isoformat(),
     }
+
+
+@dashboard_router.get("/browse-stats")
+async def get_browse_stats(authorization: str = Header(None)):
+    """获取用户浏览统计趋势"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    with get_db_session() as session:
+        # 获取最近7天每天的浏览次数
+        browse_data = session.execute(
+            text("""
+                SELECT DATE(browse_time) as date, COUNT(*) as count
+                FROM user_browse_log
+                WHERE browse_time >= CURRENT_DATE - INTERVAL '6 days'
+                GROUP BY DATE(browse_time)
+                ORDER BY date
+            """)
+        ).fetchall()
+
+    return {
+        "browse_trend": [{"date": str(row[0]), "count": row[1]} for row in browse_data],
+    }
+
+
+@dashboard_router.post("/browse-log")
+async def log_browse(
+    request: dict,
+    authorization: str = Header(None)
+):
+    """记录用户浏览"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    bvid = request.get("bvid")
+    if not bvid:
+        raise HTTPException(status_code=400, detail="bvid is required")
+
+    with get_db_session() as session:
+        session.execute(
+            text("""
+                INSERT INTO user_browse_log (user_id, bvid)
+                VALUES (:user_id, :bvid)
+            """),
+            {"user_id": user.id, "bvid": bvid}
+        )
+
+    return {"success": True}
 
 
 @dashboard_router.get("/featured")
