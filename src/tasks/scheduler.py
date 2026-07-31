@@ -7,7 +7,7 @@
 
 使用 threading.Timer 实现简单定时调度
 """
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Optional, Callable, Dict, List
 from dataclasses import dataclass, field
 from threading import Timer
@@ -141,7 +141,8 @@ class SimpleScheduler:
         target = datetime.combine(now.date(), time(task.cron_hour, task.cron_minute))
 
         if target <= now:
-            target = target.replace(day=now.day + 1)
+            # 使用 timedelta 处理日期跨越，避免月份最后一天问题
+            target = target + timedelta(days=1)
 
         return (target - now).total_seconds()
 
