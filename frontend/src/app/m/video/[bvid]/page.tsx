@@ -141,7 +141,7 @@ export default function MobileVideoPage() {
     if (!text) return text;
 
     // 步骤1: 格式化文本 - 添加空行分隔
-    let formatted = text
+    const formatted = text
       // 本质后面加空行
       .replace(/(的三重叠加[。])/g, '$1\n\n')
       // 每个点前加两个空行（点与点之间空出一行）
@@ -158,9 +158,9 @@ export default function MobileVideoPage() {
       /'([^']*)'/g,
       (match, inner) => {
         // 移除所有**加粗**标记，只保留文字
-        let cleanInner = inner.replace(/\*\*/g, '');
+        const cleanInner = inner.replace(/\*\*/g, '');
         // 将单引号内的每个词用粉色包裹，+号保持原样
-        let processed = cleanInner.replace(
+        const processed = cleanInner.replace(
           /([^+\s]+)/g,
           '<span class="text-pink-500">$1</span>'
         );
