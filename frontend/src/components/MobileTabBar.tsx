@@ -7,7 +7,7 @@ import clsx from "clsx";
 
 const tabs = [
   { name: "榜单", href: "/m", icon: Home, disabled: false },
-  { name: "自选赛道", href: "/m/analysis", icon: Bookmark, disabled: true },
+  { name: "自选赛道", href: "/m/my-feed", icon: Bookmark, disabled: false },
   { name: "会员", href: "/m/pricing", icon: CreditCard, disabled: true },
   { name: "我的", href: "/m/profile", icon: User, disabled: false },
 ];

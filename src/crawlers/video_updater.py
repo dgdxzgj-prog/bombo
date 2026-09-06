@@ -347,7 +347,7 @@ class VideoUpdater:
             data = response.json()
 
             if data.get("code") == 0:
-                return data.get("data", {}).get("online", 0)
+                return int(data.get("data", {}).get("total", 0) or data.get("data", {}).get("online", 0))
             return 0
         except Exception as e:
             print(f"Get online count error: {e}")

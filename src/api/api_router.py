@@ -333,7 +333,7 @@ def cover_proxy(url: str = Query(..., description="B站封面图片URL")):
 
     # 允许的B站CDN域名
     allowed_domains = ["i0.hdslb.com", "i1.hdslb.com", "i2.hdslb.com", "i3.hdslb.com"]
-    is_allowed = any(url.startswith(f"https://{domain}/") for domain in allowed_domains)
+    is_allowed = any(url.startswith(f"https://{domain}/") or url.startswith(f"http://{domain}/") for domain in allowed_domains)
     if not is_allowed:
         raise HTTPException(status_code=400, detail="Only Bilibili covers allowed")
 
@@ -487,6 +487,41 @@ async def get_video(bvid: str, authorization: str = Header(None)):
     """获取视频详情（公开接口，无需认证）"""
     service = MonitorPoolService()
     video = service.get_video_by_bvid(bvid)
+
+    # 如果在monitor_pool中找不到，检查user_monitor_pool
+    if not video:
+        from src.services.user_monitor_service import UserMonitorService
+        user_monitor_service = UserMonitorService()
+        user_video = user_monitor_service.get_video_by_bvid(bvid)
+        if user_video:
+            # 转换UserMonitorVideo为Video对象（只使用Video模型支持的字段）
+            video = Video(
+                id=user_video.id,
+                bvid=user_video.bvid,
+                title=user_video.title,
+                author=user_video.author,
+                author_mid=user_video.author_mid,
+                channel=user_video.channel,
+                keyword=user_video.keyword,
+                view_yesterday=user_video.view_yesterday,
+                view_today=user_video.view_today,
+                growth_rate=user_video.growth_rate,
+                like_count=user_video.like_count,
+                favorite_count=user_video.favorite_count,
+                reply_count=user_video.reply_count,
+                coin_count=user_video.coin_count,
+                share_count=user_video.share_count,
+                danmu_count=user_video.danmu_count,
+                online_count=user_video.online_count,
+                max_online_today=user_video.max_online_today,
+                pubdate=user_video.pubdate,
+                cover_url=user_video.cover_url,
+                duration=user_video.duration,
+                tags=user_video.tags,
+                status=user_video.status,
+                first_seen=user_video.first_seen,
+                last_collected=user_video.last_collected,
+            )
 
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -1715,3 +1750,235 @@ async def update_system_config(
             raise HTTPException(status_code=404, detail="Config not found")
 
         return {"success": True, "message": "Config updated successfully"}
+
+
+# ============== 用户自选赛道路由 ==============
+
+user_keyword_router = APIRouter(prefix="/api/user/keywords", tags=["用户关键词"])
+user_feed_router = APIRouter(prefix="/api/user/feed", tags=["用户订阅Feed"])
+
+
+class AddKeywordRequest(BaseModel):
+    """添加关键词请求"""
+    keyword: str
+    channel: Optional[str] = "其他"
+
+
+class UpdateKeywordStatusRequest(BaseModel):
+    """更新关键词状态请求"""
+    status: int  # 1=启用, 0=停用
+
+
+class FeedQueryParams(BaseModel):
+    """Feed查询参数"""
+    status: Optional[str] = None
+    keyword: Optional[str] = None
+    channel: Optional[str] = None
+    search: Optional[str] = None
+    sort_by: str = "max_online_today"
+    sort_order: str = "desc"
+    limit: int = Query(50, le=100)
+    offset: int = Query(0, ge=0)
+
+
+@user_keyword_router.get("")
+async def list_user_keywords(authorization: str = Header(None)):
+    """获取当前用户的关键词列表"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_keyword_service import UserKeywordService
+    service = UserKeywordService()
+
+    # 获取关键词列表（带视频数量）
+    from src.services.user_feed_service import UserFeedService
+    feed_service = UserFeedService()
+    keywords = feed_service.get_user_keywords_with_counts(user.id)
+
+    # 同时获取用户当前的关键词数量上限信息
+    total_count = service.count_user_keywords(user.id)
+
+    return {
+        "keywords": keywords,
+        "total_count": total_count,
+        "max_count": service.MAX_KEYWORDS_PER_USER,
+    }
+
+
+@user_keyword_router.post("")
+async def add_user_keyword(
+    request: AddKeywordRequest,
+    authorization: str = Header(None),
+):
+    """添加关键词并触发首次采集"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_keyword_service import UserKeywordService
+    service = UserKeywordService()
+
+    # 添加关键词
+    keyword_obj, error = service.add_keyword(user.id, request.keyword, request.channel)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+    # 触发首次B站搜索采集
+    from src.tasks.user_feed_tasks import search_keyword_and_collect
+    try:
+        collected = search_keyword_and_collect(user.id, request.keyword)
+    except Exception as e:
+        collected = 0
+        print(f"Keyword search error: {e}")
+
+    return {
+        "success": True,
+        "keyword": keyword_obj.to_dict(),
+        "collected_count": collected,
+        "message": f"已添加关键词「{request.keyword}」，发现 {collected} 个视频" if collected > 0 else f"已添加关键词「{request.keyword}」，暂无符合条件的视频",
+    }
+
+
+@user_keyword_router.delete("/{keyword_id}")
+async def delete_user_keyword(
+    keyword_id: int,
+    authorization: str = Header(None),
+):
+    """删除关键词"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_keyword_service import UserKeywordService
+    service = UserKeywordService()
+
+    success, error = service.delete_keyword(user.id, keyword_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=error)
+
+    return {"success": True, "message": "关键词已删除"}
+
+
+@user_keyword_router.put("/{keyword_id}")
+async def update_keyword_status(
+    keyword_id: int,
+    request: UpdateKeywordStatusRequest,
+    authorization: str = Header(None),
+):
+    """更新关键词状态（启用/停用）"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_keyword_service import UserKeywordService
+    service = UserKeywordService()
+
+    success, error = service.update_keyword_status(keyword_id, user.id, request.status)
+    if not success:
+        raise HTTPException(status_code=404, detail=error)
+
+    return {"success": True, "message": "关键词状态已更新"}
+
+
+@user_feed_router.get("")
+async def get_user_feed(
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    channel: Optional[str] = None,
+    search: Optional[str] = None,
+    sort_by: str = Query("max_online_today", regex="^(max_online_today|view_today|growth_rate|first_seen|subscribed_at)$"),
+    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    limit: int = Query(50, le=100),
+    offset: int = Query(0, ge=0),
+    authorization: str = Header(None),
+):
+    """获取用户订阅的视频列表"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_feed_service import UserFeedService
+    service = UserFeedService()
+
+    videos = service.get_user_feed(
+        user_id=user.id,
+        status=status,
+        keyword=keyword,
+        channel=channel,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+    )
+
+    total = service.get_user_feed_count(
+        user_id=user.id,
+        status=status,
+        keyword=keyword,
+        channel=channel,
+        search=search,
+    )
+
+    return {
+        "videos": videos,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@user_feed_router.get("/stats")
+async def get_user_feed_stats(authorization: str = Header(None)):
+    """获取用户订阅统计"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_feed_service import UserFeedService
+    service = UserFeedService()
+
+    stats = service.get_feed_stats(user.id)
+    return stats
+
+
+@user_feed_router.get("/categories")
+async def get_user_categories(authorization: str = Header(None)):
+    """获取用户订阅涉及的赛道列表"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_feed_service import UserFeedService
+    service = UserFeedService()
+
+    categories = service.get_user_categories(user.id)
+    return {"categories": categories}
+
+
+@user_feed_router.post("/refresh")
+async def refresh_user_feed(authorization: str = Header(None)):
+    """手动刷新用户订阅（对所有关键词执行搜索）"""
+    user = get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.services.user_keyword_service import UserKeywordService
+    from src.tasks.user_feed_tasks import refresh_user_keywords
+
+    service = UserKeywordService()
+    keywords = service.get_user_keywords(user.id, active_only=True)
+
+    if not keywords:
+        return {"success": True, "message": "没有活跃关键词", "collected_count": 0}
+
+    try:
+        collected = refresh_user_keywords(user.id, [k.keyword for k in keywords])
+        return {
+            "success": True,
+            "message": f"刷新完成，发现 {collected} 个新视频",
+            "collected_count": collected,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"刷新失败: {str(e)}")
