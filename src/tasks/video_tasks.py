@@ -1018,42 +1018,42 @@ def init_video_tasks() -> None:
     scheduler._schedule_task(scheduler.tasks["ai_analyze_featured"], initial_delay=600)
 
     # ============================================
-    # 用户自选赛道定时任务
+    # 用户自选赛道定时任务 [已暂时禁用]
     # ============================================
 
-    # 每日关键词刷新任务 - 每天02:00执行
-    # 合并执行：衰退清理 + 刷新搜索
-    scheduler.add_cron_task(
-        task_id="daily_keyword_refresh",
-        name="Daily Keyword Refresh",
-        func=daily_keyword_refresh_task,
-        hour=2,
-        minute=0,
-    )
-
-    # 每日上榜结算任务 - 每天23:59执行
-    # 根据当日max_online_today判定上榜/下榜
-    scheduler.add_cron_task(
-        task_id="daily_featured_settlement",
-        name="Daily Featured Settlement",
-        func=daily_featured_settlement_task,
-        hour=23,
-        minute=59,
-    )
-
-    # 每小时用户Feed更新任务 - 每小时执行
-    # 更新用户订阅视频的在线人数和播放数据
-    scheduler.add_interval_task(
-        task_id="hourly_user_feed_update",
-        name="Hourly User Feed Update",
-        func=hourly_user_feed_update_task,
-        interval_seconds=3600,
-    )
-
-    # 调度用户Feed任务
-    # daily_keyword_refresh: 立即调度（每天02:00执行）
-    # daily_featured_settlement: 立即调度（每天23:59执行）
-    # hourly_user_feed_update: 延迟15分钟执行（避免与hourly_video_update同时）
-    scheduler._schedule_task(scheduler.tasks["daily_keyword_refresh"], initial_delay=0)
-    scheduler._schedule_task(scheduler.tasks["daily_featured_settlement"], initial_delay=0)
-    scheduler._schedule_task(scheduler.tasks["hourly_user_feed_update"], initial_delay=900)
+    # # 每日关键词刷新任务 - 每天02:00执行
+    # # 合并执行：衰退清理 + 刷新搜索
+    # scheduler.add_cron_task(
+    #     task_id="daily_keyword_refresh",
+    #     name="Daily Keyword Refresh",
+    #     func=daily_keyword_refresh_task,
+    #     hour=2,
+    #     minute=0,
+    # )
+    #
+    # # 每日上榜结算任务 - 每天23:59执行
+    # # 根据当日max_online_today判定上榜/下榜
+    # scheduler.add_cron_task(
+    #     task_id="daily_featured_settlement",
+    #     name="Daily Featured Settlement",
+    #     func=daily_featured_settlement_task,
+    #     hour=23,
+    #     minute=59,
+    # )
+    #
+    # # 每小时用户Feed更新任务 - 每小时执行
+    # # 更新用户订阅视频的在线人数和播放数据
+    # scheduler.add_interval_task(
+    #     task_id="hourly_user_feed_update",
+    #     name="Hourly User Feed Update",
+    #     func=hourly_user_feed_update_task,
+    #     interval_seconds=3600,
+    # )
+    #
+    # # 调度用户Feed任务
+    # # daily_keyword_refresh: 立即调度（每天02:00执行）
+    # # daily_featured_settlement: 立即调度（每天23:59执行）
+    # # hourly_user_feed_update: 延迟15分钟执行（避免与hourly_video_update同时）
+    # scheduler._schedule_task(scheduler.tasks["daily_keyword_refresh"], initial_delay=0)
+    # scheduler._schedule_task(scheduler.tasks["daily_featured_settlement"], initial_delay=0)
+    # scheduler._schedule_task(scheduler.tasks["hourly_user_feed_update"], initial_delay=900)
