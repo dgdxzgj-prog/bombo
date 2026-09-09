@@ -87,6 +87,53 @@ class SnapshotService:
             print(f"Get video detail error: {e}")
             return None
 
+    async def _get_video_detail_with_retry(self, bvid: str, max_retries: int = 3) -> Optional[Dict[str, Any]]:
+        """
+        带重试机制的视频详情获取（专门处理 412 错误）
+
+        Args:
+            bvid: 视频BV号
+            max_retries: 最大重试次数
+
+        Returns:
+            视频详情数据，失败返回None
+        """
+        import random
+        import httpx
+
+        base_delay = 2
+        for attempt in range(max_retries):
+            try:
+                detail = await self._get_video_detail_async(bvid)
+                if detail:
+                    return detail
+
+                # 如果获取失败（非 412 错误），直接返回
+                return None
+
+            except Exception as e:
+                error_str = str(e)
+
+                # 检查是否是 412 错误（反爬验证页面）
+                is_412 = (
+                    "412" in error_str or
+                    "status code 412" in error_str.lower() or
+                    isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 412
+                )
+
+                if is_412 and attempt < max_retries - 1:
+                    # 指数退避 + 随机抖动
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0.5, 2), 30)
+                    print(f"  412 error for {bvid}, retry {attempt + 1}/{max_retries}, waiting {delay:.2f}s")
+                    await asyncio.sleep(delay)
+                    continue
+
+                # 非 412 错误或其他错误，直接返回
+                print(f"Get video detail error: {e}")
+                return None
+
+        return None
+
     def _parse_chinese_number(self, num_str: str) -> int:
         """
         解析中文数字格式字符串，如 "2.5万+"、"1万+"、"1000+"
@@ -432,11 +479,11 @@ class SnapshotService:
         """使用信号量限制并发采集单个视频（带随机延时防风控）"""
         import random
         async with semaphore:
-            try:
-                # 随机延时 1-3 秒，避免B站风控
-                await asyncio.sleep(random.uniform(1, 3))
+            # 随机延时 2-5 秒，避免B站风控
+            await asyncio.sleep(random.uniform(2, 5))
 
-                detail = await self._get_video_detail_async(bvid)
+            try:
+                detail = await self._get_video_detail_with_retry(bvid)
                 if not detail:
                     return (False, None, f"{bvid}: Failed to get video detail")
 
