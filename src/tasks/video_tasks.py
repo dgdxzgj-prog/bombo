@@ -948,12 +948,13 @@ def init_video_tasks() -> None:
     # 每小时统一调度任务（P0核心任务）
     # 包含：快照采集 + 成熟视频判定 + 状态更新
     # 执行时间：每小时执行一次，延迟5分钟启动
-    scheduler.add_interval_task(
-        task_id="hourly_video_update",
-        name="Hourly Video Update",
-        func=hourly_video_update_task,
-        interval_seconds=3600,  # 1小时
-    )
+    # [已暂停] - 2026-09-09 - 服务器IP被B站风控
+    # scheduler.add_interval_task(
+    #     task_id="hourly_video_update",
+    #     name="Hourly Video Update",
+    #     func=hourly_video_update_task,
+    #     interval_seconds=3600,  # 1小时
+    # )
 
     # AI分析爆款视频任务 - 每小时执行一次
     # 在hourly_video_update完成后执行，确保分析的是最新状态
